@@ -1,0 +1,12 @@
+whisper_url   = "http://localhost:8080/v1/audio/transcriptions"
+ollama_url    = "http://localhost:11434/api/generate"
+whisper_model = "whisper-large-turbo"
+llm_model     = "qwen2.5:7b-instruct"
+
+prompt = """
+Rewrite the following dictation as clear, concise English. \
+Translate to English if needed. Fix grammar, remove filler, preserve intent. \
+Output ONLY the rewritten text, no preamble.
+
+---
+"""
