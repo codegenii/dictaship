@@ -1,7 +1,6 @@
 use anyhow::Result;
-use arboard::Clipboard;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use enigo::{Enigo, Key, Keyboard, Settings, Direction};
+use enigo::{Enigo, Keyboard, Settings};
 use global_hotkey::{hotkey::{Code, HotKey, Modifiers}, GlobalHotKeyManager, GlobalHotKeyEvent};
 use hound::{WavSpec, WavWriter};
 use parking_lot::Mutex;
@@ -114,12 +113,8 @@ fn distill(text: &str, cfg: &Config) -> Result<String> {
 }
 
 fn paste(text: &str) -> Result<()> {
-    Clipboard::new()?.set_text(text.to_string())?;
-    thread::sleep(Duration::from_millis(80));
     let mut enigo = Enigo::new(&Settings::default())?;
-    enigo.key(Key::Control, Direction::Press)?;
-    enigo.key(Key::Unicode('v'), Direction::Click)?;
-    enigo.key(Key::Control, Direction::Release)?;
+    enigo.text(text)?;
     Ok(())
 }
 
