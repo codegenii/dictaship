@@ -309,7 +309,7 @@ fn main() -> Result<()> {
 
     let event_loop = EventLoopBuilder::new().build();
     let manager = GlobalHotKeyManager::new()?;
-    let toggle = HotKey::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyR);
+    let toggle = HotKey::new(Some(Modifiers::ALT), Code::KeyQ);
     manager.register(toggle)?;
     let rx = GlobalHotKeyEvent::receiver();
 
@@ -320,7 +320,7 @@ fn main() -> Result<()> {
     let _tray = TrayIconBuilder::new()
         .with_icon(make_icon())
         .with_menu(Box::new(tray_menu))
-        .with_tooltip("Partizan – Ctrl+Alt+R to record")
+        .with_tooltip("Partizan – Alt+Q to record")
         .build()
         .expect("tray icon");
 
@@ -328,7 +328,7 @@ fn main() -> Result<()> {
     let tray_rx = TrayIconEvent::receiver();
 
     let mut recorder: Option<Recorder> = None;
-    println!("ready. Ctrl+Alt+R to toggle recording.");
+    println!("ready. Alt+Q to toggle recording.");
 
     event_loop.run(move |_, _, cf| {
         *cf = ControlFlow::WaitUntil(std::time::Instant::now() + Duration::from_millis(50));
