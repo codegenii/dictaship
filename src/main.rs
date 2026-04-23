@@ -3,10 +3,63 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use enigo::{Enigo, Keyboard, Settings};
 use global_hotkey::{hotkey::{Code, HotKey, Modifiers}, GlobalHotKeyManager, GlobalHotKeyEvent};
 use hound::{WavSpec, WavWriter};
+use muda::{Menu, MenuItem, MenuEvent};
 use parking_lot::Mutex;
 use serde::Deserialize;
 use std::{io::Cursor, sync::Arc, thread, time::Duration};
-use tao::event_loop::{EventLoopBuilder, ControlFlow};
+use tao::event_loop::{ControlFlow, EventLoopBuilder};
+use tray_icon::{TrayIconBuilder, TrayIconEvent};
+
+mod console_window {
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetConsoleWindow() -> isize;
+    }
+
+    #[link(name = "user32")]
+    unsafe extern "system" {
+        fn ShowWindow(hwnd: isize, n_cmd_show: i32) -> i32;
+        fn IsWindowVisible(hwnd: isize) -> i32;
+    }
+
+    pub fn hide() {
+        unsafe {
+            let hwnd = GetConsoleWindow();
+            if hwnd != 0 { ShowWindow(hwnd, 0); }
+        }
+    }
+
+    pub fn toggle() {
+        unsafe {
+            let hwnd = GetConsoleWindow();
+            if hwnd == 0 { return; }
+            if IsWindowVisible(hwnd) != 0 {
+                ShowWindow(hwnd, 0); // SW_HIDE
+            } else {
+                ShowWindow(hwnd, 5); // SW_SHOW
+            }
+        }
+    }
+}
+
+fn make_icon() -> tray_icon::Icon {
+    const S: u32 = 32;
+    let mut rgba = Vec::with_capacity((S * S * 4) as usize);
+    let c = S as f32 / 2.0;
+    let r = S as f32 / 2.0 - 1.0;
+    for y in 0..S {
+        for x in 0..S {
+            let dx = x as f32 - c;
+            let dy = y as f32 - c;
+            if dx * dx + dy * dy <= r * r {
+                rgba.extend_from_slice(&[34, 197, 94, 255]); // green circle
+            } else {
+                rgba.extend_from_slice(&[0, 0, 0, 0]);
+            }
+        }
+    }
+    tray_icon::Icon::from_rgba(rgba, S, S).expect("valid icon")
+}
 
 #[derive(Deserialize)]
 struct Config {
@@ -252,17 +305,46 @@ mod tests {
 fn main() -> Result<()> {
     let cfg = Arc::new(load_config()?);
 
+    console_window::hide();
+
     let event_loop = EventLoopBuilder::new().build();
     let manager = GlobalHotKeyManager::new()?;
     let toggle = HotKey::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyR);
     manager.register(toggle)?;
     let rx = GlobalHotKeyEvent::receiver();
 
+    let tray_menu = Menu::new();
+    let exit_item = MenuItem::new("Exit", true, None);
+    tray_menu.append(&exit_item).expect("menu append");
+
+    let _tray = TrayIconBuilder::new()
+        .with_icon(make_icon())
+        .with_menu(Box::new(tray_menu))
+        .with_tooltip("Partizan – Ctrl+Alt+R to record")
+        .build()
+        .expect("tray icon");
+
+    let menu_rx = MenuEvent::receiver();
+    let tray_rx = TrayIconEvent::receiver();
+
     let mut recorder: Option<Recorder> = None;
     println!("ready. Ctrl+Alt+R to toggle recording.");
 
     event_loop.run(move |_, _, cf| {
         *cf = ControlFlow::WaitUntil(std::time::Instant::now() + Duration::from_millis(50));
+
+        while let Ok(ev) = menu_rx.try_recv() {
+            if ev.id == *exit_item.id() {
+                std::process::exit(0);
+            }
+        }
+
+        while let Ok(ev) = tray_rx.try_recv() {
+            if let TrayIconEvent::Click { button: tray_icon::MouseButton::Left, .. } = ev {
+                console_window::toggle();
+            }
+        }
+
         while let Ok(ev) = rx.try_recv() {
             if ev.id == toggle.id() && ev.state == global_hotkey::HotKeyState::Pressed {
                 match recorder.take() {

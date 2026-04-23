@@ -15,3 +15,5 @@ anyhow = "1"
 parking_lot = "0.12"
 tao = "0.30"  # event loop for hotkeys
 toml = "0.8"
+tray-icon = "0.22.1"
+muda = "0.17"
