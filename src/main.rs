@@ -573,21 +573,32 @@ fn is_too_short(samples: &[i16], sample_rate: u32) -> bool {
     samples.len() < sample_rate as usize / 2
 }
 
-fn process(samples: Vec<i16>, sample_rate: u32, cfg: Arc<Config>) {
-    let result = (|| -> Result<()> {
-        if is_too_short(&samples, sample_rate) {
-            anyhow::bail!("too short");
-        }
-        let wav = samples_to_wav(&samples, sample_rate)?;
-        println!("transcribing {} samples...", samples.len());
-        let transcript = transcribe(wav, &cfg)?;
-        println!("raw: {transcript}");
-        let distilled = distill(&transcript, &cfg)?;
-        println!("out: {distilled}");
-        paste(&distilled)?;
-        Ok(())
-    })();
-    if let Err(e) = result { eprintln!("error: {e:#}"); }
+fn process(samples: Vec<i16>, sample_rate: u32, cfg: Arc<Config>, status: Arc<Mutex<Option<String>>>) {
+    let set = |s: Option<&str>| *status.lock() = s.map(str::to_owned);
+
+    if is_too_short(&samples, sample_rate) {
+        eprintln!("error: recording too short");
+        set(None);
+        return;
+    }
+    let wav = match samples_to_wav(&samples, sample_rate) {
+        Ok(w) => w,
+        Err(e) => { eprintln!("error: {e:#}"); set(None); return; }
+    };
+    println!("transcribing {} samples...", samples.len());
+    let transcript = match transcribe(wav, &cfg) {
+        Ok(t) => t,
+        Err(e) => { eprintln!("error: {e:#}"); set(None); return; }
+    };
+    println!("raw: {transcript}");
+    set(Some("Distilling..."));
+    let distilled = match distill(&transcript, &cfg) {
+        Ok(d) => d,
+        Err(e) => { eprintln!("error: {e:#}"); set(None); return; }
+    };
+    println!("out: {distilled}");
+    if let Err(e) = paste(&distilled) { eprintln!("error: {e:#}"); }
+    set(None);
 }
 
 // ── tests ─────────────────────────────────────────────────────────────────────
@@ -780,21 +791,33 @@ fn main() -> Result<()> {
     tray_menu.append(&settings_item).expect("menu append");
     tray_menu.append(&exit_item).expect("menu append");
 
-    let _tray = TrayIconBuilder::new()
+    let tray = TrayIconBuilder::new()
         .with_icon(make_icon())
         .with_menu(Box::new(tray_menu))
-        .with_tooltip("Partizan – Alt+Q to record")
+        .with_tooltip(format!("Partizan – {current_hotkey_str} to record"))
         .build()
         .expect("tray icon");
 
     let menu_rx = MenuEvent::receiver();
     let tray_rx = TrayIconEvent::receiver();
 
+    let tray_status: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let mut last_tooltip = format!("Partizan – {current_hotkey_str} to record");
     let mut recorder: Option<Recorder> = None;
     println!("ready. {} to toggle recording.", current_hotkey_str);
 
     event_loop.run(move |_, _, cf| {
         *cf = ControlFlow::WaitUntil(std::time::Instant::now() + Duration::from_millis(50));
+
+        // Sync tray tooltip with current status
+        let desired = {
+            let s = tray_status.lock();
+            s.clone().unwrap_or_else(|| format!("Partizan – {current_hotkey_str} to record"))
+        };
+        if desired != last_tooltip {
+            last_tooltip = desired.clone();
+            tray.set_tooltip(Some(&desired)).ok();
+        }
 
         // Settings dialog result
         if let Some(new_hotkey_str) = settings_dialog::take_result() {
@@ -802,6 +825,7 @@ fn main() -> Result<()> {
                 let _ = manager.unregister(toggle);
                 toggle = new_hotkey;
                 current_hotkey_str = new_hotkey_str.clone();
+                last_tooltip.clear(); // force idle tooltip refresh with new hotkey
                 if manager.register(toggle).is_err() {
                     eprintln!("failed to register hotkey {new_hotkey_str}");
                 } else {
@@ -830,14 +854,20 @@ fn main() -> Result<()> {
             if ev.id == toggle.id() && ev.state == global_hotkey::HotKeyState::Pressed {
                 match recorder.take() {
                     None => match Recorder::start() {
-                        Ok(r) => { recorder = Some(r); println!("recording..."); }
+                        Ok(r) => {
+                            *tray_status.lock() = Some("Recording...".to_owned());
+                            recorder = Some(r);
+                            println!("recording...");
+                        }
                         Err(e) => eprintln!("mic error: {e}"),
                     },
                     Some(r) => {
                         println!("stopping.");
+                        *tray_status.lock() = Some("Processing...".to_owned());
                         let (samples, sample_rate) = r.stop();
                         let cfg = cfg.clone();
-                        thread::spawn(move || process(samples, sample_rate, cfg));
+                        let status = tray_status.clone();
+                        thread::spawn(move || process(samples, sample_rate, cfg, status));
                     }
                 }
             }
