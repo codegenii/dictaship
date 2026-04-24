@@ -554,23 +554,32 @@ fn save_hotkey_to_config(hotkey_str: &str) {
 
 // ── tray icon ─────────────────────────────────────────────────────────────────
 
-fn make_icon() -> tray_icon::Icon {
+fn make_colored_icon(r: u8, g: u8, b: u8) -> tray_icon::Icon {
     const S: u32 = 32;
     let mut rgba = Vec::with_capacity((S * S * 4) as usize);
     let c = S as f32 / 2.0;
-    let r = S as f32 / 2.0 - 1.0;
+    let rad = S as f32 / 2.0 - 1.0;
     for y in 0..S {
         for x in 0..S {
             let dx = x as f32 - c;
             let dy = y as f32 - c;
-            if dx * dx + dy * dy <= r * r {
-                rgba.extend_from_slice(&[34, 197, 94, 255]);
+            if dx * dx + dy * dy <= rad * rad {
+                rgba.extend_from_slice(&[r, g, b, 255]);
             } else {
                 rgba.extend_from_slice(&[0, 0, 0, 0]);
             }
         }
     }
     tray_icon::Icon::from_rgba(rgba, S, S).expect("valid icon")
+}
+
+fn icon_for_status(status: Option<&str>) -> tray_icon::Icon {
+    match status {
+        Some("Recording...")  => make_colored_icon(239, 68,  68),  // red
+        Some("Processing...") => make_colored_icon(251, 146, 60),  // orange
+        Some("Distilling...") => make_colored_icon(96,  165, 250), // blue
+        _                     => make_colored_icon(34,  197, 94),  // green (idle)
+    }
 }
 
 // ── config ────────────────────────────────────────────────────────────────────
@@ -917,7 +926,7 @@ fn main() -> Result<()> {
     unsafe { SetMenuDefaultItem(tray_menu.hpopupmenu(), 0, 1); }
 
     let tray = TrayIconBuilder::new()
-        .with_icon(make_icon())
+        .with_icon(icon_for_status(None))
         .with_menu(Box::new(tray_menu))
         .with_tooltip(format!("Partizan – {current_hotkey_str} to record"))
         .build()
@@ -936,9 +945,10 @@ fn main() -> Result<()> {
     event_loop.run(move |_, _, cf| {
         *cf = ControlFlow::WaitUntil(std::time::Instant::now() + Duration::from_millis(50));
 
-        // Sync balloon with current status
+        // Sync icon + balloon with current status
         let current_status = tray_status.lock().clone();
         if current_status != last_status {
+            tray.set_icon(Some(icon_for_status(current_status.as_deref()))).ok();
             match &current_status {
                 Some(text) => tray_balloon::show(text),
                 None       => tray_balloon::clear(),
