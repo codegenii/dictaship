@@ -954,8 +954,14 @@ fn main() -> Result<()> {
         if current_status != last_status {
             tray.set_icon(Some(icon_for_status(current_status.as_deref()))).ok();
             match &current_status {
-                Some(text) => tray_balloon::show(text),
-                None       => tray_balloon::clear(),
+                Some(text) => {
+                    tray.set_tooltip(Some(text.as_str())).ok();
+                    tray_balloon::show(text);
+                }
+                None => {
+                    tray.set_tooltip(Some(format!("Partizan – {current_hotkey_str} to record"))).ok();
+                    tray_balloon::clear();
+                }
             }
             last_status = current_status;
         }
