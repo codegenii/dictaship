@@ -3,12 +3,19 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use enigo::{Enigo, Keyboard, Settings};
 use global_hotkey::{hotkey::{Code, HotKey, Modifiers}, GlobalHotKeyManager, GlobalHotKeyEvent};
 use hound::{WavSpec, WavWriter};
-use muda::{Menu, MenuItem, MenuEvent};
+use muda::{ContextMenu, Menu, MenuItem, MenuEvent};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::{io::Cursor, sync::Arc, thread, time::Duration};
 use tao::event_loop::{ControlFlow, EventLoopBuilder};
 use tray_icon::{TrayIconBuilder, TrayIconEvent};
+
+// ── WinAPI helpers ───────────────────────────────────────────────────────────
+
+#[link(name = "user32")]
+unsafe extern "system" {
+    fn SetMenuDefaultItem(h_menu: isize, u_item: u32, f_by_pos: u32) -> i32;
+}
 
 // ── console show/hide ────────────────────────────────────────────────────────
 
@@ -786,10 +793,15 @@ fn main() -> Result<()> {
     let rx = GlobalHotKeyEvent::receiver();
 
     let tray_menu = Menu::new();
+    let show_logs_item = MenuItem::new("Show logs", true, None);
     let settings_item = MenuItem::new("Settings", true, None);
     let exit_item = MenuItem::new("Exit", true, None);
+    tray_menu.append(&show_logs_item).expect("menu append");
     tray_menu.append(&settings_item).expect("menu append");
     tray_menu.append(&exit_item).expect("menu append");
+
+    // Bold the first item as the Windows default menu action
+    unsafe { SetMenuDefaultItem(tray_menu.hpopupmenu(), 0, 1); }
 
     let tray = TrayIconBuilder::new()
         .with_icon(make_icon())
@@ -839,14 +851,21 @@ fn main() -> Result<()> {
             if ev.id == *exit_item.id() {
                 std::process::exit(0);
             }
+            if ev.id == *show_logs_item.id() {
+                console_window::toggle();
+            }
             if ev.id == *settings_item.id() {
                 settings_dialog::open(&current_hotkey_str);
             }
         }
 
         while let Ok(ev) = tray_rx.try_recv() {
-            if let TrayIconEvent::Click { button: tray_icon::MouseButton::Left, .. } = ev {
-                console_window::toggle();
+            match ev {
+                TrayIconEvent::Click { button: tray_icon::MouseButton::Left, .. }
+                | TrayIconEvent::DoubleClick { button: tray_icon::MouseButton::Left, .. } => {
+                    console_window::toggle();
+                }
+                _ => {}
             }
         }
 
