@@ -182,8 +182,8 @@ mod settings_dialog {
                     PENDING.with(|p| *p.borrow_mut() = hotkey_str.clone());
                     unsafe {
                         let display = GetDlgItem(hwnd, ID_DISPLAY);
-                        let w = wide(&hotkey_str);
-                        SetWindowTextW(display, w.as_ptr());
+                        SetWindowTextW(display, wide("").as_ptr());
+                        SetWindowTextW(display, wide(&hotkey_str).as_ptr());
                     }
                 }
             }
@@ -203,8 +203,8 @@ mod settings_dialog {
                 PENDING.with(|p| *p.borrow_mut() = DEFAULT_HOTKEY.to_string());
                 unsafe {
                     let display = GetDlgItem(hwnd, ID_DISPLAY);
-                    let w = wide(DEFAULT_HOTKEY);
-                    SetWindowTextW(display, w.as_ptr());
+                    SetWindowTextW(display, wide("").as_ptr());
+                    SetWindowTextW(display, wide(DEFAULT_HOTKEY).as_ptr());
                     SetFocus(hwnd);
                 }
                 return 0;
