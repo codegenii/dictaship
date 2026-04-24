@@ -581,7 +581,7 @@ fn icon_for_status(status: Option<&str>) -> tray_icon::Icon {
     match status {
         Some("Recording...")  => make_colored_icon(239, 68,  68),  // red
         Some("Processing...") => make_colored_icon(251, 146, 60),  // orange
-        Some("Distilling...") => make_colored_icon(96,  165, 250), // blue
+        Some("Distilling...") => make_colored_icon(168, 85,  247), // purple
         _                     => make_colored_icon(34,  197, 94),  // green (idle)
     }
 }
