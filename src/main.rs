@@ -259,6 +259,8 @@ mod settings_dialog {
         fn GetKeyState(vk: i32) -> i16;
         fn SetFocus(hwnd: Hwnd) -> Hwnd;
         fn SetWindowTextW(hwnd: Hwnd, text: *const u16) -> i32;
+        fn InvalidateRect(hwnd: Hwnd, lp_rect: *const u8, b_erase: i32) -> i32;
+        fn UpdateWindow(hwnd: Hwnd) -> i32;
         fn MapVirtualKeyW(u_code: u32, u_map_type: u32) -> u32;
         fn GetKeyNameTextW(l_param: i32, lp_string: *mut u16, cch_size: i32) -> i32;
     }
@@ -302,8 +304,9 @@ mod settings_dialog {
                     PENDING.with(|p| *p.borrow_mut() = hotkey_str.clone());
                     unsafe {
                         let display = GetDlgItem(hwnd, ID_DISPLAY);
-                        SetWindowTextW(display, wide("").as_ptr());
                         SetWindowTextW(display, wide(&hotkey_str).as_ptr());
+                        InvalidateRect(display, std::ptr::null(), 1);
+                        UpdateWindow(display);
                     }
                 }
             }
@@ -323,8 +326,9 @@ mod settings_dialog {
                 PENDING.with(|p| *p.borrow_mut() = DEFAULT_HOTKEY.to_string());
                 unsafe {
                     let display = GetDlgItem(hwnd, ID_DISPLAY);
-                    SetWindowTextW(display, wide("").as_ptr());
                     SetWindowTextW(display, wide(DEFAULT_HOTKEY).as_ptr());
+                    InvalidateRect(display, std::ptr::null(), 1);
+                    UpdateWindow(display);
                     SetFocus(hwnd);
                 }
                 return 0;
