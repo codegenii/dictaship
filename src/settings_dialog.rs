@@ -284,7 +284,7 @@ fn run_edit_dialog(parent: Hwnd, mode_idx: usize) {
             WS_EX_TOPMOST | WS_EX_DLGMODALFRAME,
             cls_name.as_ptr(), title.as_ptr(),
             WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
-            CW_USEDEFAULT, CW_USEDEFAULT, 430, 320,
+            CW_USEDEFAULT, CW_USEDEFAULT, 430, 380,
             0, 0, hinst, std::ptr::null(),
         );
         if hwnd == 0 { EnableWindow(parent, 1); return; }
