@@ -4,7 +4,7 @@ use std::os::windows::ffi::OsStrExt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
-use crate::config::ModeConfig;
+use crate::config::{load_settings_size, save_settings_size_to_config, ModeConfig};
 
 static OPEN:   AtomicBool = AtomicBool::new(false);
 static RESULT: std::sync::Mutex<Option<SettingsResult>> = std::sync::Mutex::new(None);
@@ -22,8 +22,11 @@ const WM_COMMAND:          u32   = 0x0111;
 const WM_DESTROY:          u32   = 0x0002;
 const WM_KEYDOWN:          u32   = 0x0100;
 const WM_SYSKEYDOWN:       u32   = 0x0104;
+const WM_SIZE:             u32   = 0x0005;
+const WM_GETMINMAXINFO:    u32   = 0x0024;
 const WS_CAPTION:          u32   = 0x00C00000;
 const WS_SYSMENU:          u32   = 0x00080000;
+const WS_THICKFRAME:       u32   = 0x00040000;
 const WS_CHILD:            u32   = 0x40000000;
 const WS_VISIBLE:          u32   = 0x10000000;
 const WS_BORDER:           u32   = 0x00800000;
@@ -68,11 +71,12 @@ const SKIP_VKEYS: &[usize] = &[0x10, 0x11, 0x12, 0x5B, 0x5C];
 
 thread_local! {
     // Settings dialog state
-    static PENDING:          RefCell<String>        = RefCell::new(String::new());
-    static PENDING_MODE:     RefCell<String>        = RefCell::new(String::new());
-    static MODES_DATA:       RefCell<Vec<ModeConfig>> = RefCell::new(Vec::new());
-    static COMBO_HWND:       Cell<Hwnd>             = Cell::new(0);
-    static DISPLAY_HWND:     Cell<Hwnd>             = Cell::new(0);
+    static PENDING:          RefCell<String>           = RefCell::new(String::new());
+    static PENDING_MODE:     RefCell<String>           = RefCell::new(String::new());
+    static MODES_DATA:       RefCell<Vec<ModeConfig>>  = RefCell::new(Vec::new());
+    static COMBO_HWND:       Cell<Hwnd>                = Cell::new(0);
+    static DISPLAY_HWND:     Cell<Hwnd>                = Cell::new(0);
+    static SETTINGS_CTRLS:  RefCell<Option<SettingsControls>> = RefCell::new(None);
 
     // Edit-preset dialog state
     static EDIT_NAME_HWND:   Cell<Hwnd>   = Cell::new(0);
@@ -105,6 +109,28 @@ struct Point { x: i32, y: i32 }
 
 #[repr(C)]
 struct Rect { left: i32, top: i32, right: i32, bottom: i32 }
+
+#[repr(C)]
+struct MinMaxInfo {
+    pt_reserved:       Point,
+    pt_max_size:       Point,
+    pt_max_position:   Point,
+    pt_min_track_size: Point,
+    pt_max_track_size: Point,
+}
+
+#[derive(Clone)]
+struct SettingsControls {
+    instruction:  Hwnd,
+    hotkey_label: Hwnd,
+    mode_label:   Hwnd,
+    edit_btn:     Hwnd,
+    add_btn:      Hwnd,
+    del_btn:      Hwnd,
+    apply_btn:    Hwnd,
+    default_btn:  Hwnd,
+    cancel_btn:   Hwnd,
+}
 
 #[repr(C)]
 struct Msg {
@@ -146,7 +172,10 @@ unsafe extern "system" {
     fn ReleaseDC(hwnd: Hwnd, hdc: isize) -> i32;
     fn FillRect(hdc: isize, lp_rc: *const Rect, h_brush: isize) -> i32;
     fn GetClientRect(hwnd: Hwnd, lp_rect: *mut Rect) -> i32;
+    fn GetWindowRect(hwnd: Hwnd, lp_rect: *mut Rect) -> i32;
     fn GetSysColorBrush(n_index: i32) -> isize;
+    fn MoveWindow(hwnd: Hwnd, x: i32, y: i32, w: i32, h: i32, repaint: i32) -> i32;
+    fn InvalidateRect(hwnd: Hwnd, lp_rect: *const Rect, b_erase: i32) -> i32;
 }
 
 const MAPVK_VK_TO_VSC: u32 = 0;
@@ -180,6 +209,29 @@ fn read_hwnd_text(hwnd: Hwnd) -> String {
         let mut buf = vec![0u16; len as usize + 1];
         GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
         String::from_utf16_lossy(&buf[..len as usize])
+    }
+}
+
+fn layout_settings(client_w: i32, client_h: i32) {
+    let snap = SETTINGS_CTRLS.with(|c| c.borrow().clone());
+    let Some(c) = snap else { return; };
+    let m       = 12i32;
+    let cw      = client_w - 2 * m;
+    let btn_h   = 26i32;
+    let btn_y   = client_h - m - btn_h;
+    unsafe {
+        MoveWindow(c.instruction,                         m,        12,  cw,  18,    1);
+        MoveWindow(c.hotkey_label,                        m,        36,  cw,  18,    1);
+        MoveWindow(DISPLAY_HWND.with(|h| h.get()),        m,        56,  cw,  26,    1);
+        MoveWindow(c.mode_label,                          m,        98,  cw,  18,    1);
+        MoveWindow(COMBO_HWND.with(|h| h.get()),          m,        118, cw,  120,   1);
+        MoveWindow(c.edit_btn,                            m,        148, 68,  btn_h, 1);
+        MoveWindow(c.add_btn,                             m + 76,   148, 68,  btn_h, 1);
+        MoveWindow(c.del_btn,                             m + 152,  148, 68,  btn_h, 1);
+        MoveWindow(c.apply_btn,                           m,        btn_y, 80, btn_h, 1);
+        MoveWindow(c.default_btn,                         m + 90,   btn_y, 80, btn_h, 1);
+        MoveWindow(c.cancel_btn,                          m + 180,  btn_y, 80, btn_h, 1);
+        InvalidateRect(DISPLAY_HWND.with(|h| h.get()), std::ptr::null(), 1);
     }
 }
 
@@ -353,6 +405,17 @@ fn run_edit_dialog(parent: Hwnd, mode_idx: usize) {
 // ── Settings dialog ──────────────────────────────────────────────────────────
 
 unsafe extern "system" fn wnd_proc(hwnd: isize, msg: u32, wp: usize, lp: isize) -> isize {
+    if msg == WM_SIZE {
+        let w = (lp as usize & 0xFFFF) as i32;
+        let h = ((lp as usize >> 16) & 0xFFFF) as i32;
+        layout_settings(w, h);
+        return 0;
+    }
+    if msg == WM_GETMINMAXINFO {
+        let info = &mut *(lp as *mut MinMaxInfo);
+        info.pt_min_track_size = Point { x: 330, y: 270 };
+        return 0;
+    }
     if msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN {
         if !SKIP_VKEYS.contains(&wp) {
             if let Some(key_name) = vkey_to_name(wp) {
@@ -436,6 +499,14 @@ unsafe extern "system" fn wnd_proc(hwnd: isize, msg: u32, wp: usize, lp: isize) 
         }
     }
     if msg == WM_DESTROY {
+        unsafe {
+            let mut rc = Rect { left: 0, top: 0, right: 0, bottom: 0 };
+            GetWindowRect(hwnd, &mut rc);
+            let w = (rc.right  - rc.left) as u32;
+            let h = (rc.bottom - rc.top)  as u32;
+            save_settings_size_to_config(w, h);
+        }
+        SETTINGS_CTRLS.with(|c| *c.borrow_mut() = None);
         OPEN.store(false, Ordering::SeqCst);
         unsafe { PostQuitMessage(0); }
         return 0;
@@ -467,45 +538,46 @@ fn run_dialog(current_hotkey: String, modes: Vec<ModeConfig>, active_mode: Strin
         RegisterClassExW(&wc);
 
         let title = wide("Dictaphile \u{2013} Settings");
+        let (init_w, init_h) = load_settings_size();
         let hwnd = CreateWindowExW(
-            WS_EX_TOPMOST | WS_EX_DLGMODALFRAME,
+            WS_EX_TOPMOST,
             cls_name.as_ptr(), title.as_ptr(),
-            WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
-            CW_USEDEFAULT, CW_USEDEFAULT, 330, 280,
+            WS_CAPTION | WS_SYSMENU | WS_VISIBLE | WS_THICKFRAME,
+            CW_USEDEFAULT, CW_USEDEFAULT, init_w as i32, init_h as i32,
             0, 0, hinst, std::ptr::null(),
         );
         if hwnd == 0 { OPEN.store(false, Ordering::SeqCst); return; }
 
         // Instruction
-        CreateWindowExW(0, wide("STATIC").as_ptr(),
+        let instruction = CreateWindowExW(0, wide("STATIC").as_ptr(),
             wide("Press a new hotkey combo, then click Apply").as_ptr(),
             WS_CHILD | WS_VISIBLE | SS_SIMPLE,
-            12, 12, 296, 18, hwnd, 0, hinst, std::ptr::null());
+            12, 12, 100, 18, hwnd, 0, hinst, std::ptr::null());
 
         // Hotkey label
-        CreateWindowExW(0, wide("STATIC").as_ptr(),
+        let hotkey_label = CreateWindowExW(0, wide("STATIC").as_ptr(),
             wide("Recording hotkey:").as_ptr(),
             WS_CHILD | WS_VISIBLE | SS_SIMPLE,
-            12, 36, 296, 18, hwnd, 0, hinst, std::ptr::null());
+            12, 36, 100, 18, hwnd, 0, hinst, std::ptr::null());
 
         // Hotkey display (read via keyboard events, not directly editable)
         let display = CreateWindowExW(0, wide("STATIC").as_ptr(),
             wide(&current_hotkey).as_ptr(),
             WS_CHILD | WS_VISIBLE | SS_SIMPLE | WS_BORDER,
-            12, 56, 296, 26, hwnd, ID_DISPLAY as _, hinst, std::ptr::null());
+            12, 56, 100, 26, hwnd, ID_DISPLAY as _, hinst, std::ptr::null());
         DISPLAY_HWND.with(|h| h.set(display));
 
         // Mode label
-        CreateWindowExW(0, wide("STATIC").as_ptr(),
+        let mode_label = CreateWindowExW(0, wide("STATIC").as_ptr(),
             wide("Distillation mode:").as_ptr(),
             WS_CHILD | WS_VISIBLE | SS_SIMPLE,
-            12, 98, 296, 18, hwnd, 0, hinst, std::ptr::null());
+            12, 98, 100, 18, hwnd, 0, hinst, std::ptr::null());
 
         // Mode combo box (h=120 gives room for ~5 items in the dropdown)
         let combo = CreateWindowExW(
             0, wide("COMBOBOX").as_ptr(), std::ptr::null(),
             WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL,
-            12, 118, 218, 120,
+            12, 118, 100, 120,
             hwnd, ID_MODE_COMBO as _, hinst, std::ptr::null(),
         );
         for mode in &modes {
@@ -517,26 +589,38 @@ fn run_dialog(current_hotkey: String, modes: Vec<ModeConfig>, active_mode: Strin
         COMBO_HWND.with(|c| c.set(combo));
 
         // Mode action buttons: Edit | Add | Delete
-        CreateWindowExW(0, wide("BUTTON").as_ptr(), wide("Edit").as_ptr(),
+        let edit_btn = CreateWindowExW(0, wide("BUTTON").as_ptr(), wide("Edit").as_ptr(),
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
             12, 148, 68, 26, hwnd, ID_EDIT_PRESET as _, hinst, std::ptr::null());
-        CreateWindowExW(0, wide("BUTTON").as_ptr(), wide("Add").as_ptr(),
+        let add_btn = CreateWindowExW(0, wide("BUTTON").as_ptr(), wide("Add").as_ptr(),
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
             88, 148, 68, 26, hwnd, ID_ADD_MODE as _, hinst, std::ptr::null());
-        CreateWindowExW(0, wide("BUTTON").as_ptr(), wide("Delete").as_ptr(),
+        let del_btn = CreateWindowExW(0, wide("BUTTON").as_ptr(), wide("Delete").as_ptr(),
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
             164, 148, 68, 26, hwnd, ID_DELETE_MODE as _, hinst, std::ptr::null());
 
         // Apply / Default / Cancel
-        CreateWindowExW(0, wide("BUTTON").as_ptr(), wide("Apply").as_ptr(),
+        let apply_btn = CreateWindowExW(0, wide("BUTTON").as_ptr(), wide("Apply").as_ptr(),
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            10, 195, 80, 26, hwnd, ID_APPLY as _, hinst, std::ptr::null());
-        CreateWindowExW(0, wide("BUTTON").as_ptr(), wide("Default").as_ptr(),
+            12, 195, 80, 26, hwnd, ID_APPLY as _, hinst, std::ptr::null());
+        let default_btn = CreateWindowExW(0, wide("BUTTON").as_ptr(), wide("Default").as_ptr(),
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            110, 195, 80, 26, hwnd, ID_DEFAULT as _, hinst, std::ptr::null());
-        CreateWindowExW(0, wide("BUTTON").as_ptr(), wide("Cancel").as_ptr(),
+            102, 195, 80, 26, hwnd, ID_DEFAULT as _, hinst, std::ptr::null());
+        let cancel_btn = CreateWindowExW(0, wide("BUTTON").as_ptr(), wide("Cancel").as_ptr(),
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            210, 195, 80, 26, hwnd, ID_CANCEL as _, hinst, std::ptr::null());
+            192, 195, 80, 26, hwnd, ID_CANCEL as _, hinst, std::ptr::null());
+
+        // Wire up resize layout — apply initial positions based on actual client size
+        SETTINGS_CTRLS.with(|ctrls_cell| {
+            *ctrls_cell.borrow_mut() = Some(SettingsControls {
+                instruction, hotkey_label, mode_label,
+                edit_btn, add_btn, del_btn,
+                apply_btn, default_btn, cancel_btn,
+            });
+        });
+        let mut rc = Rect { left: 0, top: 0, right: 0, bottom: 0 };
+        GetClientRect(hwnd, &mut rc);
+        layout_settings(rc.right - rc.left, rc.bottom - rc.top);
 
         SetFocus(hwnd);
 

@@ -20,6 +20,10 @@ pub struct Config {
     pub distill_mode:  Option<String>,
     #[serde(default)]
     pub modes:         Vec<ModeConfig>,
+    #[serde(default)]
+    pub settings_w:    Option<u32>,
+    #[serde(default)]
+    pub settings_h:    Option<u32>,
 }
 
 impl Config {
@@ -79,6 +83,27 @@ pub fn save_distill_mode_to_config(mode_name: &str) {
 
 pub fn save_modes_to_config(modes: &[ModeConfig]) {
     reserialize("config.toml", |cfg| cfg.modes = modes.to_vec());
+}
+
+pub const DEFAULT_SETTINGS_W: u32 = 480;
+pub const DEFAULT_SETTINGS_H: u32 = 290;
+
+pub fn load_settings_size() -> (u32, u32) {
+    let raw = std::fs::read_to_string("config.toml").unwrap_or_default();
+    let Ok(cfg) = toml::from_str::<Config>(&raw) else {
+        return (DEFAULT_SETTINGS_W, DEFAULT_SETTINGS_H);
+    };
+    (
+        cfg.settings_w.unwrap_or(DEFAULT_SETTINGS_W),
+        cfg.settings_h.unwrap_or(DEFAULT_SETTINGS_H),
+    )
+}
+
+pub fn save_settings_size_to_config(w: u32, h: u32) {
+    reserialize("config.toml", |cfg| {
+        cfg.settings_w = Some(w);
+        cfg.settings_h = Some(h);
+    });
 }
 
 #[cfg(test)]
@@ -154,12 +179,28 @@ mod tests {
     }
 
     #[test]
+    fn settings_size_fields_default_to_none() {
+        let cfg = parse_config(BASE_TOML).unwrap();
+        assert_eq!(cfg.settings_w, None);
+        assert_eq!(cfg.settings_h, None);
+    }
+
+    #[test]
+    fn settings_size_fields_parse() {
+        let raw = format!("{BASE_TOML}\nsettings_w = 500\nsettings_h = 350");
+        let cfg = parse_config(&raw).unwrap();
+        assert_eq!(cfg.settings_w, Some(500u32));
+        assert_eq!(cfg.settings_h, Some(350u32));
+    }
+
+    #[test]
     fn load_config_populates_modes_when_empty() {
         let cfg_no_modes = Config {
             whisper_url:   String::new(), ollama_url:    String::new(),
             whisper_model: String::new(), llm_model:     String::new(),
             hotkey:        None,          prompt:        "p".to_string(),
             distill_mode:  None,          modes:         vec![],
+            settings_w:    None,          settings_h:    None,
         };
         // Simulate what load_config does: populate modes when empty
         let modes = if cfg_no_modes.modes.is_empty() {
