@@ -43,6 +43,7 @@ const CB_GETCURSEL:        u32   = 0x0147;
 const CB_SETCURSEL:        u32   = 0x014E;
 const CB_RESETCONTENT:     u32   = 0x014B;
 const CBN_SELCHANGE:       u32   = 1;
+const CBN_CLOSEUP:         u32   = 8;
 const CW_USEDEFAULT:       i32   = 0x80000000u32 as i32;
 const COLOR_BTNFACE:       isize = 15;
 
@@ -345,14 +346,21 @@ unsafe extern "system" fn wnd_proc(hwnd: isize, msg: u32, wp: usize, lp: isize) 
         let id    = (wp & 0xFFFF) as i32;
         let notif = ((wp >> 16) & 0xFFFF) as u32;
 
-        if id == ID_MODE_COMBO && notif == CBN_SELCHANGE {
-            let combo = COMBO_HWND.with(|c| c.get());
-            let sel = unsafe { SendMessageW(combo, CB_GETCURSEL, 0, 0) } as usize;
-            MODES_DATA.with(|m| {
-                if let Some(mode) = m.borrow().get(sel) {
-                    PENDING_MODE.with(|p| *p.borrow_mut() = mode.name.clone());
-                }
-            });
+        if id == ID_MODE_COMBO {
+            if notif == CBN_SELCHANGE {
+                let combo = COMBO_HWND.with(|c| c.get());
+                let sel = unsafe { SendMessageW(combo, CB_GETCURSEL, 0, 0) } as usize;
+                MODES_DATA.with(|m| {
+                    if let Some(mode) = m.borrow().get(sel) {
+                        PENDING_MODE.with(|p| *p.borrow_mut() = mode.name.clone());
+                    }
+                });
+            }
+            if notif == CBN_CLOSEUP {
+                // Return focus to the dialog so subsequent key presses are
+                // captured as hotkey input rather than going to the combo box.
+                unsafe { SetFocus(hwnd); }
+            }
             return 0;
         }
         if id == ID_EDIT_PRESET {

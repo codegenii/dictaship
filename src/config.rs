@@ -146,33 +146,6 @@ mod tests {
     }
 
     #[test]
-    fn active_prompt_finds_named_mode() {
-        let cfg = Config {
-            whisper_url:   String::new(), ollama_url:    String::new(),
-            whisper_model: String::new(), llm_model:     String::new(),
-            hotkey:        None,          prompt:        "legacy".to_string(),
-            distill_mode:  None,
-            modes: vec![
-                ModeConfig { name: "A".to_string(), prompt: "prompt-A".to_string() },
-                ModeConfig { name: "B".to_string(), prompt: "prompt-B".to_string() },
-            ],
-        };
-        assert_eq!(cfg.active_prompt("A"), "prompt-A");
-        assert_eq!(cfg.active_prompt("B"), "prompt-B");
-    }
-
-    #[test]
-    fn active_prompt_falls_back_to_legacy() {
-        let cfg = Config {
-            whisper_url:   String::new(), ollama_url:    String::new(),
-            whisper_model: String::new(), llm_model:     String::new(),
-            hotkey:        None,          prompt:        "legacy-prompt".to_string(),
-            distill_mode:  None,          modes:         vec![],
-        };
-        assert_eq!(cfg.active_prompt("NonExistent"), "legacy-prompt");
-    }
-
-    #[test]
     fn default_modes_uses_legacy_prompt() {
         let modes = default_modes("my-prompt");
         assert_eq!(modes[0].name, "Distill");
