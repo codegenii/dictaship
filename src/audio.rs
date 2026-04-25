@@ -110,6 +110,7 @@ pub fn process(
     sample_rate: u32,
     cfg: Arc<Config>,
     status: Arc<Mutex<Option<String>>>,
+    passthrough: bool,
 ) {
     let set = |s: Option<&str>| *status.lock() = s.map(str::to_owned);
 
@@ -128,6 +129,14 @@ pub fn process(
         Err(e) => { eprintln!("error: {e:#}"); set(None); return; }
     };
     println!("raw: {transcript}");
+
+    if passthrough {
+        println!("out (passthrough): {transcript}");
+        if let Err(e) = paste(&transcript) { eprintln!("error: {e:#}"); }
+        set(None);
+        return;
+    }
+
     set(Some("Distilling..."));
     let distilled = match distill(&transcript, &cfg) {
         Ok(d) => d,

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager};
-use muda::{ContextMenu, Menu, MenuItem, MenuEvent};
+use muda::{CheckMenuItem, ContextMenu, Menu, MenuItem, MenuEvent};
 use parking_lot::Mutex;
 use std::{sync::Arc, thread, time::Duration};
 use tao::event_loop::{ControlFlow, EventLoopBuilder};
@@ -40,11 +40,13 @@ fn main() -> Result<()> {
     let rx = GlobalHotKeyEvent::receiver();
 
     let tray_menu = Menu::new();
-    let show_logs_item = MenuItem::new("Show logs", true, None);
-    let settings_item  = MenuItem::new("Settings",  true, None);
-    let exit_item      = MenuItem::new("Exit",      true, None);
+    let show_logs_item   = MenuItem::new("Show logs",        true, None);
+    let settings_item    = MenuItem::new("Settings",         true, None);
+    let passthrough_item = CheckMenuItem::new("Passthrough mode", true, false, None);
+    let exit_item        = MenuItem::new("Exit",             true, None);
     tray_menu.append(&show_logs_item).expect("menu append");
     tray_menu.append(&settings_item).expect("menu append");
+    tray_menu.append(&passthrough_item).expect("menu append");
     tray_menu.append(&exit_item).expect("menu append");
 
     // Bold the first item as the Windows default menu action
@@ -134,9 +136,10 @@ fn main() -> Result<()> {
                         println!("stopping.");
                         *tray_status.lock() = Some("Processing...".to_owned());
                         let (samples, sample_rate) = r.stop();
-                        let cfg    = cfg.clone();
-                        let status = tray_status.clone();
-                        thread::spawn(move || process(samples, sample_rate, cfg, status));
+                        let cfg         = cfg.clone();
+                        let status      = tray_status.clone();
+                        let passthrough = passthrough_item.is_checked();
+                        thread::spawn(move || process(samples, sample_rate, cfg, status, passthrough));
                     }
                 }
             }
