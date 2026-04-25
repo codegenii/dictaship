@@ -1,4 +1,4 @@
-# partizan
+# dictaphile
 
 A Windows dictation tool that records audio via a global hotkey, transcribes it locally with Whisper, polishes the text with an LLM, and pastes the result wherever your cursor is.
 
@@ -35,7 +35,7 @@ ollama serve
 **3. Clone and build** (use the x64 Native Tools Command Prompt for VS)
 ```
 git clone <repo>
-cd partizan
+cd dictaphile
 cargo build --release
 ```
 
@@ -59,7 +59,7 @@ Output ONLY the rewritten text, no preamble.
 
 **5. Run**
 ```
-partizan.exe
+dictaphile.exe
 ```
 
 The app runs silently in the background. Use Ctrl+Alt+R to toggle recording.

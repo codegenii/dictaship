@@ -228,7 +228,7 @@ fn run_edit_dialog(parent: Hwnd, mode_idx: usize) {
         EnableWindow(parent, 0);
 
         let hinst    = GetModuleHandleW(std::ptr::null());
-        let cls_name = wide("PartizanModeEdit");
+        let cls_name = wide("DictaphileModeEdit");
         let wc = WndClassExW {
             cb_size:         std::mem::size_of::<WndClassExW>() as u32,
             style:           0,
@@ -243,7 +243,7 @@ fn run_edit_dialog(parent: Hwnd, mode_idx: usize) {
         };
         RegisterClassExW(&wc); // ignore return; class may already exist
 
-        let title = wide("Partizan \u{2013} Edit Preset");
+        let title = wide("Dictaphile \u{2013} Edit Preset");
         let hwnd = CreateWindowExW(
             WS_EX_TOPMOST | WS_EX_DLGMODALFRAME,
             cls_name.as_ptr(), title.as_ptr(),
@@ -400,7 +400,7 @@ fn run_dialog(current_hotkey: String, modes: Vec<ModeConfig>, active_mode: Strin
 
     unsafe {
         let hinst    = GetModuleHandleW(std::ptr::null());
-        let cls_name = wide("PartizanSettings");
+        let cls_name = wide("DictaphileSettings");
 
         let wc = WndClassExW {
             cb_size:         std::mem::size_of::<WndClassExW>() as u32,
@@ -416,7 +416,7 @@ fn run_dialog(current_hotkey: String, modes: Vec<ModeConfig>, active_mode: Strin
         };
         RegisterClassExW(&wc);
 
-        let title = wide("Partizan \u{2013} Settings");
+        let title = wide("Dictaphile \u{2013} Settings");
         let hwnd = CreateWindowExW(
             WS_EX_TOPMOST | WS_EX_DLGMODALFRAME,
             cls_name.as_ptr(), title.as_ptr(),

@@ -431,6 +431,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c87e182de0887fd5361989c677c4e8f5000cd9491d6d563161a8f3a5519fc7f"
 
 [[package]]
+name = "dictaphile"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "cpal",
+ "enigo",
+ "global-hotkey",
+ "hound",
+ "muda",
+ "parking_lot",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tao",
+ "toml",
+ "tray-icon",
+]
+
+[[package]]
 name = "dirs"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1987,25 +2006,6 @@ dependencies = [
  "redox_syscall",
  "smallvec",
  "windows-link",
-]
-
-[[package]]
-name = "partizan"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "cpal",
- "enigo",
- "global-hotkey",
- "hound",
- "muda",
- "parking_lot",
- "reqwest",
- "serde",
- "serde_json",
- "tao",
- "toml",
- "tray-icon",
 ]
 
 [[package]]
