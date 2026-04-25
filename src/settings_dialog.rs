@@ -59,6 +59,10 @@ const ID_EDIT_PRESET:  i32 = 106;
 const ID_EDIT_SAVE:    i32 = 201;
 const ID_EDIT_CANCEL:  i32 = 202;
 
+// Add/Delete mode buttons
+const ID_ADD_MODE:     i32 = 107;
+const ID_DELETE_MODE:  i32 = 108;
+
 // Modifier-only virtual keys to skip when capturing a hotkey
 const SKIP_VKEYS: &[usize] = &[0x10, 0x11, 0x12, 0x5B, 0x5C];
 
@@ -216,13 +220,19 @@ unsafe extern "system" fn edit_dlg_proc(hwnd: isize, msg: u32, wp: usize, _lp: i
             let name   = read_hwnd_text(EDIT_NAME_HWND.with(|h| h.get()));
             let prompt = read_hwnd_text(EDIT_PROMPT_HWND.with(|h| h.get()))
                 .replace("\r\n", "\n");
+            if name.is_empty() { return 0; }
             let idx = EDIT_MODE_IDX.with(|i| i.get());
             MODES_DATA.with(|m| {
-                if let Some(mode) = m.borrow_mut().get_mut(idx) {
-                    mode.name   = name;
+                let mut modes = m.borrow_mut();
+                if idx == usize::MAX {
+                    modes.push(ModeConfig { name: name.clone(), prompt });
+                } else if let Some(mode) = modes.get_mut(idx) {
+                    mode.name   = name.clone();
                     mode.prompt = prompt;
                 }
             });
+            // Make the saved name visible to run_edit_dialog's post-save block
+            PENDING_MODE.with(|p| *p.borrow_mut() = name);
             EDIT_SAVED.with(|s| s.set(true));
             unsafe { DestroyWindow(hwnd); }
             return 0;
@@ -327,18 +337,16 @@ fn run_edit_dialog(parent: Hwnd, mode_idx: usize) {
         SetFocus(parent);
     }
 
-    // If user saved, sync PENDING_MODE and rebuild combo
+    // If user saved, rebuild combo and select the saved/new mode.
+    // PENDING_MODE was already updated by edit_dlg_proc to the saved name.
     if EDIT_SAVED.with(|s| s.get()) {
-        let new_name = MODES_DATA.with(|m| {
-            m.borrow().get(mode_idx).map(|m| m.name.clone()).unwrap_or_default()
-        });
-        PENDING_MODE.with(|p| *p.borrow_mut() = new_name.clone());
+        let sel_name = PENDING_MODE.with(|p| p.borrow().clone());
         let combo = COMBO_HWND.with(|c| c.get());
         rebuild_combo(combo);
-        let new_idx = MODES_DATA.with(|m| {
-            m.borrow().iter().position(|m| m.name == new_name).unwrap_or(mode_idx)
+        let sel_idx = MODES_DATA.with(|m| {
+            m.borrow().iter().position(|m| m.name == sel_name).unwrap_or(0)
         });
-        unsafe { SendMessageW(combo, CB_SETCURSEL, new_idx, 0); }
+        unsafe { SendMessageW(combo, CB_SETCURSEL, sel_idx, 0); }
     }
 }
 
@@ -387,6 +395,25 @@ unsafe extern "system" fn wnd_proc(hwnd: isize, msg: u32, wp: usize, lp: isize) 
             let combo = COMBO_HWND.with(|c| c.get());
             let sel = unsafe { SendMessageW(combo, CB_GETCURSEL, 0, 0) } as usize;
             run_edit_dialog(hwnd, sel);
+            return 0;
+        }
+        if id == ID_ADD_MODE {
+            run_edit_dialog(hwnd, usize::MAX); // usize::MAX = "new mode" sentinel
+            return 0;
+        }
+        if id == ID_DELETE_MODE {
+            let n = MODES_DATA.with(|m| m.borrow().len());
+            if n <= 1 { return 0; } // always keep at least one mode
+            let combo = COMBO_HWND.with(|c| c.get());
+            let sel = unsafe { SendMessageW(combo, CB_GETCURSEL, 0, 0) } as usize;
+            MODES_DATA.with(|m| m.borrow_mut().remove(sel));
+            let new_sel = if sel > 0 { sel - 1 } else { 0 };
+            let new_name = MODES_DATA.with(|m| {
+                m.borrow().get(new_sel).map(|m| m.name.clone()).unwrap_or_default()
+            });
+            PENDING_MODE.with(|p| *p.borrow_mut() = new_name);
+            rebuild_combo(combo);
+            unsafe { SendMessageW(combo, CB_SETCURSEL, new_sel, 0); }
             return 0;
         }
         if id == ID_APPLY {
@@ -444,7 +471,7 @@ fn run_dialog(current_hotkey: String, modes: Vec<ModeConfig>, active_mode: Strin
             WS_EX_TOPMOST | WS_EX_DLGMODALFRAME,
             cls_name.as_ptr(), title.as_ptr(),
             WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
-            CW_USEDEFAULT, CW_USEDEFAULT, 330, 250,
+            CW_USEDEFAULT, CW_USEDEFAULT, 330, 280,
             0, 0, hinst, std::ptr::null(),
         );
         if hwnd == 0 { OPEN.store(false, Ordering::SeqCst); return; }
@@ -489,21 +516,27 @@ fn run_dialog(current_hotkey: String, modes: Vec<ModeConfig>, active_mode: Strin
         SendMessageW(combo, CB_SETCURSEL, sel_idx, 0);
         COMBO_HWND.with(|c| c.set(combo));
 
-        // Edit preset button
+        // Mode action buttons: Edit | Add | Delete
         CreateWindowExW(0, wide("BUTTON").as_ptr(), wide("Edit").as_ptr(),
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            238, 118, 70, 26, hwnd, ID_EDIT_PRESET as _, hinst, std::ptr::null());
+            12, 148, 68, 26, hwnd, ID_EDIT_PRESET as _, hinst, std::ptr::null());
+        CreateWindowExW(0, wide("BUTTON").as_ptr(), wide("Add").as_ptr(),
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            88, 148, 68, 26, hwnd, ID_ADD_MODE as _, hinst, std::ptr::null());
+        CreateWindowExW(0, wide("BUTTON").as_ptr(), wide("Delete").as_ptr(),
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            164, 148, 68, 26, hwnd, ID_DELETE_MODE as _, hinst, std::ptr::null());
 
-        // Action buttons
+        // Apply / Default / Cancel
         CreateWindowExW(0, wide("BUTTON").as_ptr(), wide("Apply").as_ptr(),
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            10, 165, 80, 26, hwnd, ID_APPLY as _, hinst, std::ptr::null());
+            10, 195, 80, 26, hwnd, ID_APPLY as _, hinst, std::ptr::null());
         CreateWindowExW(0, wide("BUTTON").as_ptr(), wide("Default").as_ptr(),
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            110, 165, 80, 26, hwnd, ID_DEFAULT as _, hinst, std::ptr::null());
+            110, 195, 80, 26, hwnd, ID_DEFAULT as _, hinst, std::ptr::null());
         CreateWindowExW(0, wide("BUTTON").as_ptr(), wide("Cancel").as_ptr(),
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            210, 165, 80, 26, hwnd, ID_CANCEL as _, hinst, std::ptr::null());
+            210, 195, 80, 26, hwnd, ID_CANCEL as _, hinst, std::ptr::null());
 
         SetFocus(hwnd);
 
