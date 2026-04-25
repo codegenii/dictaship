@@ -15,7 +15,7 @@ mod tray;
 mod tray_balloon;
 
 use audio::{process, Recorder};
-use config::load_config;
+use config::{load_config, save_distill_mode_to_config, save_modes_to_config};
 use hotkey::{parse_hotkey, save_hotkey_to_config};
 use tray::icon_for_status;
 
@@ -64,6 +64,12 @@ fn main() -> Result<()> {
     let menu_rx = MenuEvent::receiver();
     let tray_rx = TrayIconEvent::receiver();
 
+    // Distillation mode state — kept separately so it can change without reloading cfg
+    let initial_mode = cfg.distill_mode.clone()
+        .unwrap_or_else(|| cfg.modes.first().map(|m| m.name.clone()).unwrap_or_default());
+    let modes_state: Arc<Mutex<Vec<config::ModeConfig>>> = Arc::new(Mutex::new(cfg.modes.clone()));
+    let current_mode: Arc<Mutex<String>> = Arc::new(Mutex::new(initial_mode));
+
     let tray_status: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let mut last_status: Option<String> = None;
     let mut recorder: Option<Recorder> = None;
@@ -90,25 +96,35 @@ fn main() -> Result<()> {
         }
 
         // Settings dialog result
-        if let Some(new_hotkey_str) = settings_dialog::take_result() {
-            if let Some(new_hotkey) = parse_hotkey(&new_hotkey_str) {
+        if let Some(result) = settings_dialog::take_result() {
+            if let Some(new_hotkey) = parse_hotkey(&result.hotkey) {
                 let _ = manager.unregister(toggle);
                 toggle = new_hotkey;
-                current_hotkey_str = new_hotkey_str.clone();
-                tray.set_tooltip(Some(format!("Partizan – {new_hotkey_str} to record"))).ok();
+                current_hotkey_str = result.hotkey.clone();
+                tray.set_tooltip(Some(format!("Partizan – {} to record", result.hotkey))).ok();
                 if manager.register(toggle).is_err() {
-                    eprintln!("failed to register hotkey {new_hotkey_str}");
+                    eprintln!("failed to register hotkey {}", result.hotkey);
                 } else {
-                    println!("hotkey changed to {new_hotkey_str}");
-                    save_hotkey_to_config(&new_hotkey_str);
+                    println!("hotkey changed to {}", result.hotkey);
+                    save_hotkey_to_config(&result.hotkey);
                 }
+            }
+            *current_mode.lock() = result.mode_name.clone();
+            save_distill_mode_to_config(&result.mode_name);
+            if !result.modes.is_empty() {
+                *modes_state.lock() = result.modes.clone();
+                save_modes_to_config(&result.modes);
             }
         }
 
         while let Ok(ev) = menu_rx.try_recv() {
             if ev.id == *exit_item.id()      { std::process::exit(0); }
             if ev.id == *show_logs_item.id() { console_window::toggle(); }
-            if ev.id == *settings_item.id()  { settings_dialog::open(&current_hotkey_str); }
+            if ev.id == *settings_item.id()  {
+                let modes_snap = modes_state.lock().clone();
+                let mode_snap  = current_mode.lock().clone();
+                settings_dialog::open(&current_hotkey_str, modes_snap, &mode_snap);
+            }
         }
 
         while let Ok(ev) = tray_rx.try_recv() {
@@ -139,7 +155,16 @@ fn main() -> Result<()> {
                         let cfg         = cfg.clone();
                         let status      = tray_status.clone();
                         let passthrough = passthrough_item.is_checked();
-                        thread::spawn(move || process(samples, sample_rate, cfg, status, passthrough));
+                        let mode_name   = current_mode.lock().clone();
+                        let active_prompt = {
+                            let ms = modes_state.lock();
+                            ms.iter().find(|m| m.name == mode_name)
+                                .map(|m| m.prompt.clone())
+                                .unwrap_or_else(|| cfg.prompt.clone())
+                        };
+                        thread::spawn(move || {
+                            process(samples, sample_rate, cfg, status, passthrough, active_prompt)
+                        });
                     }
                 }
             }

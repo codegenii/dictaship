@@ -3,10 +3,40 @@ ollama_url    = "http://localhost:11434/api/generate"
 whisper_model = "whisper-large-turbo"
 llm_model     = "qwen2.5:7b-instruct"
 
+distill_mode = "Distill"
+
 prompt = """
 Rewrite the following dictation as clear, concise English. \
 Translate to English if needed. Fix grammar, remove filler, preserve intent. \
 Output ONLY the rewritten text, no preamble.
+
+---
+"""
+
+[[modes]]
+name   = "Distill"
+prompt = """
+Rewrite the following dictation as clear, concise English. \
+Translate to English if needed. Fix grammar, remove filler, preserve intent. \
+Output ONLY the rewritten text, no preamble.
+
+---
+"""
+
+[[modes]]
+name   = "Translate to English"
+prompt = """
+Translate the following speech to English. \
+Output ONLY the translation, no preamble.
+
+---
+"""
+
+[[modes]]
+name   = "Clean text"
+prompt = """
+Remove all filler words, interjections, and hesitations. \
+Fix punctuation. Output ONLY the cleaned text, no preamble.
 
 ---
 """

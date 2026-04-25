@@ -83,12 +83,12 @@ fn transcribe(wav: Vec<u8>, cfg: &Config) -> Result<String> {
     Ok(resp.text.trim().to_string())
 }
 
-fn distill(text: &str, cfg: &Config) -> Result<String> {
+fn distill(text: &str, cfg: &Config, prompt: &str) -> Result<String> {
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(120)).build()?;
     let body = serde_json::json!({
         "model": cfg.llm_model,
-        "prompt": format!("{}{text}", cfg.prompt),
+        "prompt": format!("{prompt}{text}"),
         "stream": false,
     });
     let resp: OllamaResp = client.post(&cfg.ollama_url).json(&body).send()?.json()?;
@@ -111,6 +111,7 @@ pub fn process(
     cfg: Arc<Config>,
     status: Arc<Mutex<Option<String>>>,
     passthrough: bool,
+    active_prompt: String,
 ) {
     let set = |s: Option<&str>| *status.lock() = s.map(str::to_owned);
 
@@ -138,7 +139,7 @@ pub fn process(
     }
 
     set(Some("Distilling..."));
-    let distilled = match distill(&transcript, &cfg) {
+    let distilled = match distill(&transcript, &cfg, &active_prompt) {
         Ok(d) => d,
         Err(e) => { eprintln!("error: {e:#}"); set(None); return; }
     };
