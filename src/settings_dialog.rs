@@ -68,6 +68,7 @@ thread_local! {
     static PENDING_MODE:     RefCell<String>        = RefCell::new(String::new());
     static MODES_DATA:       RefCell<Vec<ModeConfig>> = RefCell::new(Vec::new());
     static COMBO_HWND:       Cell<Hwnd>             = Cell::new(0);
+    static DISPLAY_HWND:     Cell<Hwnd>             = Cell::new(0);
 
     // Edit-preset dialog state
     static EDIT_NAME_HWND:   Cell<Hwnd>   = Cell::new(0);
@@ -99,6 +100,9 @@ struct WndClassExW {
 struct Point { x: i32, y: i32 }
 
 #[repr(C)]
+struct Rect { left: i32, top: i32, right: i32, bottom: i32 }
+
+#[repr(C)]
 struct Msg {
     hwnd:      Hwnd,
     message:   u32,
@@ -124,18 +128,21 @@ unsafe extern "system" {
     fn DefWindowProcW(hwnd: Hwnd, msg: u32, wp: usize, lp: isize) -> isize;
     fn DestroyWindow(hwnd: Hwnd) -> i32;
     fn EnableWindow(hwnd: Hwnd, b_enable: i32) -> i32;
-    fn GetDlgItem(dlg: Hwnd, id: i32) -> Hwnd;
     fn LoadCursorW(inst: Hwnd, name: *const u16) -> Hwnd;
     fn GetKeyState(vk: i32) -> i16;
     fn SetFocus(hwnd: Hwnd) -> Hwnd;
     fn SetWindowTextW(hwnd: Hwnd, text: *const u16) -> i32;
     fn GetWindowTextW(hwnd: Hwnd, lp_string: *mut u16, n_max_count: i32) -> i32;
     fn GetWindowTextLengthW(hwnd: Hwnd) -> i32;
-    fn InvalidateRect(hwnd: Hwnd, lp_rect: *const u8, b_erase: i32) -> i32;
     fn UpdateWindow(hwnd: Hwnd) -> i32;
     fn MapVirtualKeyW(u_code: u32, u_map_type: u32) -> u32;
     fn GetKeyNameTextW(l_param: i32, lp_string: *mut u16, cch_size: i32) -> i32;
     fn SendMessageW(hwnd: Hwnd, msg: u32, wp: usize, lp: isize) -> isize;
+    fn GetDC(hwnd: Hwnd) -> isize;
+    fn ReleaseDC(hwnd: Hwnd, hdc: isize) -> i32;
+    fn FillRect(hdc: isize, lp_rc: *const Rect, h_brush: isize) -> i32;
+    fn GetClientRect(hwnd: Hwnd, lp_rect: *mut Rect) -> i32;
+    fn GetSysColorBrush(n_index: i32) -> isize;
 }
 
 const MAPVK_VK_TO_VSC: u32 = 0;
@@ -180,6 +187,24 @@ fn rebuild_combo(combo: Hwnd) {
             unsafe { SendMessageW(combo, CB_ADDSTRING, 0, w.as_ptr() as isize); }
         }
     });
+}
+
+// Erase the entire hotkey display control before writing new text.
+// SS_SIMPLE only invalidates the bounding rect of the new (shorter) text, so
+// switching from a longer value like "Alt+R" to a shorter one like "A" would
+// leave the tail ("lt+R") visible without this full-area erase.
+fn refresh_display(text: &str) {
+    let display = DISPLAY_HWND.with(|h| h.get());
+    if display == 0 { return; }
+    unsafe {
+        let dc = GetDC(display);
+        let mut rc = Rect { left: 0, top: 0, right: 0, bottom: 0 };
+        GetClientRect(display, &mut rc);
+        FillRect(dc, &rc, GetSysColorBrush(COLOR_BTNFACE as i32));
+        ReleaseDC(display, dc);
+        SetWindowTextW(display, wide(text).as_ptr());
+        UpdateWindow(display);
+    }
 }
 
 // ── Edit-preset nested dialog ────────────────────────────────────────────────
@@ -332,12 +357,7 @@ unsafe extern "system" fn wnd_proc(hwnd: isize, msg: u32, wp: usize, lp: isize) 
                 parts.push(key_name);
                 let hotkey_str = parts.join("+");
                 PENDING.with(|p| *p.borrow_mut() = hotkey_str.clone());
-                unsafe {
-                    let display = GetDlgItem(hwnd, ID_DISPLAY);
-                    SetWindowTextW(display, wide(&hotkey_str).as_ptr());
-                    InvalidateRect(display, std::ptr::null(), 1);
-                    UpdateWindow(display);
-                }
+                refresh_display(&hotkey_str);
             }
         }
         return 0;
@@ -379,13 +399,8 @@ unsafe extern "system" fn wnd_proc(hwnd: isize, msg: u32, wp: usize, lp: isize) 
         }
         if id == ID_DEFAULT {
             PENDING.with(|p| *p.borrow_mut() = DEFAULT_HOTKEY.to_string());
-            unsafe {
-                let display = GetDlgItem(hwnd, ID_DISPLAY);
-                SetWindowTextW(display, wide(DEFAULT_HOTKEY).as_ptr());
-                InvalidateRect(display, std::ptr::null(), 1);
-                UpdateWindow(display);
-                SetFocus(hwnd);
-            }
+            refresh_display(DEFAULT_HOTKEY);
+            unsafe { SetFocus(hwnd); }
             return 0;
         }
         if id == ID_CANCEL {
@@ -447,10 +462,11 @@ fn run_dialog(current_hotkey: String, modes: Vec<ModeConfig>, active_mode: Strin
             12, 36, 296, 18, hwnd, 0, hinst, std::ptr::null());
 
         // Hotkey display (read via keyboard events, not directly editable)
-        CreateWindowExW(0, wide("STATIC").as_ptr(),
+        let display = CreateWindowExW(0, wide("STATIC").as_ptr(),
             wide(&current_hotkey).as_ptr(),
             WS_CHILD | WS_VISIBLE | SS_SIMPLE | WS_BORDER,
             12, 56, 296, 26, hwnd, ID_DISPLAY as _, hinst, std::ptr::null());
+        DISPLAY_HWND.with(|h| h.set(display));
 
         // Mode label
         CreateWindowExW(0, wide("STATIC").as_ptr(),
