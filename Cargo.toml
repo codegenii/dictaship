@@ -3,7 +3,9 @@ name = "dictaphile"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-license-file = "LICENSE"
+
+[build-dependencies]
+winres = "0.1"
 
 [dependencies]
 cpal = "0.15"
