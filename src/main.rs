@@ -11,6 +11,7 @@ mod config;
 mod console_window;
 mod hotkey;
 mod settings_dialog;
+mod single_instance;
 mod tray;
 mod tray_balloon;
 
@@ -25,6 +26,12 @@ unsafe extern "system" {
 }
 
 fn main() -> Result<()> {
+    // Exit early (with a message box) if another instance is already running.
+    let _instance_guard = match single_instance::acquire() {
+        Some(g) => g,
+        None    => return Ok(()),
+    };
+
     let cfg = Arc::new(load_config()?);
 
     console_window::hide();
