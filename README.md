@@ -72,6 +72,22 @@ dictaphile.exe
 
 The app runs silently in the system tray. Right-click the tray icon for settings or to exit; double-click to show the log window.
 
+## Building the installer
+
+Requires [Inno Setup 6](https://jrsoftware.org/isinfo.php). Run from the repo root:
+
+```powershell
+.\build-installer.ps1
+```
+
+This runs `cargo build --release` and then compiles `installer.iss`. Output: `installer\DictaphileSetup.exe`.
+
+The installer:
+- Installs to `%LocalAppData%\Dictaphile` (no UAC prompt)
+- Creates a Start Menu shortcut
+- Optionally adds Dictaphile to Windows startup (checked by default)
+- Ships a default `config.toml` on first install; upgrades never overwrite it
+
 ## Running tests
 
 ```
