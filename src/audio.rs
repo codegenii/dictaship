@@ -3,7 +3,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use enigo::{Enigo, Keyboard, Settings};
 use hound::{WavSpec, WavWriter};
 use parking_lot::Mutex;
-use std::{io::Cursor, sync::Arc, time::Duration};
+use std::{io::Cursor, sync::Arc, thread, time::Duration};
 
 use crate::config::Config;
 
@@ -105,6 +105,25 @@ pub fn is_too_short(samples: &[i16], sample_rate: u32) -> bool {
     samples.len() < sample_rate as usize / 2
 }
 
+/// Show `label` in the tray balloon/tooltip and log `detail` to the console.
+/// Auto-clears the status after 6 seconds so the tray returns to idle.
+pub fn set_error_status(
+    status: &Arc<Mutex<Option<String>>>,
+    label: &'static str,
+    detail: impl std::fmt::Display,
+) {
+    eprintln!("error: {detail:#}");
+    *status.lock() = Some(label.to_owned());
+    let status = status.clone();
+    thread::spawn(move || {
+        thread::sleep(Duration::from_secs(6));
+        let mut s = status.lock();
+        if s.as_deref() == Some(label) {
+            *s = None;
+        }
+    });
+}
+
 pub fn process(
     samples: Vec<i16>,
     sample_rate: u32,
@@ -114,38 +133,42 @@ pub fn process(
     active_prompt: String,
 ) {
     let set = |s: Option<&str>| *status.lock() = s.map(str::to_owned);
+    let err = |label, detail| set_error_status(&status, label, detail);
 
     if is_too_short(&samples, sample_rate) {
-        eprintln!("error: recording too short");
-        set(None);
+        err("Recording too short", "recording too short".to_string());
         return;
     }
     let wav = match samples_to_wav(&samples, sample_rate) {
         Ok(w) => w,
-        Err(e) => { eprintln!("error: {e:#}"); set(None); return; }
+        Err(e) => { err("Recording error", format!("{e:#}")); return; }
     };
     println!("transcribing {} samples...", samples.len());
     let transcript = match transcribe(wav, &cfg) {
         Ok(t) => t,
-        Err(e) => { eprintln!("error: {e:#}"); set(None); return; }
+        Err(e) => { err("Transcription failed", format!("{e:#}")); return; }
     };
     println!("raw: {transcript}");
 
     if passthrough {
         println!("out (passthrough): {transcript}");
-        if let Err(e) = paste(&transcript) { eprintln!("error: {e:#}"); }
-        set(None);
+        match paste(&transcript) {
+            Ok(()) => set(None),
+            Err(e)  => err("Paste failed", format!("{e:#}")),
+        }
         return;
     }
 
     set(Some("Distilling..."));
     let distilled = match distill(&transcript, &cfg, &active_prompt) {
         Ok(d) => d,
-        Err(e) => { eprintln!("error: {e:#}"); set(None); return; }
+        Err(e) => { err("Distillation failed", format!("{e:#}")); return; }
     };
     println!("out: {distilled}");
-    if let Err(e) = paste(&distilled) { eprintln!("error: {e:#}"); }
-    set(None);
+    match paste(&distilled) {
+        Ok(()) => set(None),
+        Err(e)  => err("Paste failed", format!("{e:#}")),
+    }
 }
 
 #[cfg(test)]
@@ -205,6 +228,25 @@ mod tests {
             let mut reader = hound::WavReader::new(std::io::Cursor::new(wav)).unwrap();
             let decoded: Vec<i16> = reader.samples::<i16>().map(|s| s.unwrap()).collect();
             assert_eq!(decoded, original);
+        }
+    }
+
+    mod errors {
+        use super::*;
+
+        #[test]
+        fn set_error_status_sets_tray_label() {
+            let status: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+            set_error_status(&status, "Test error", "some detail");
+            assert_eq!(status.lock().as_deref(), Some("Test error"));
+        }
+
+        #[test]
+        fn set_error_status_logs_detail() {
+            // Verify the function accepts both &str and Display impls (anyhow::Error, etc.)
+            let status: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+            set_error_status(&status, "Transcription failed", anyhow::anyhow!("connection refused"));
+            assert_eq!(status.lock().as_deref(), Some("Transcription failed"));
         }
     }
 

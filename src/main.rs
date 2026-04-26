@@ -14,7 +14,7 @@ mod settings_dialog;
 mod tray;
 mod tray_balloon;
 
-use audio::{process, Recorder};
+use audio::{process, set_error_status, Recorder};
 use config::{load_config, save_distill_mode_to_config, save_modes_to_config};
 use hotkey::{parse_hotkey, save_hotkey_to_config};
 use tray::icon_for_status;
@@ -145,7 +145,7 @@ fn main() -> Result<()> {
                             recorder = Some(r);
                             println!("recording...");
                         }
-                        Err(e) => eprintln!("mic error: {e}"),
+                        Err(e) => set_error_status(&tray_status, "Microphone error", e),
                     },
                     Some(r) => {
                         println!("stopping.");
