@@ -24,6 +24,10 @@ const WM_KEYDOWN:          u32   = 0x0100;
 const WM_SYSKEYDOWN:       u32   = 0x0104;
 const WM_SIZE:             u32   = 0x0005;
 const WM_GETMINMAXINFO:    u32   = 0x0024;
+const WM_DPICHANGED:       u32   = 0x02E0;
+const SWP_NOMOVE:          u32   = 0x0002;
+const SWP_NOZORDER:        u32   = 0x0004;
+const SWP_NOACTIVATE:      u32   = 0x0010;
 const WS_CAPTION:          u32   = 0x00C00000;
 const WS_SYSMENU:          u32   = 0x00080000;
 const WS_THICKFRAME:       u32   = 0x00040000;
@@ -77,6 +81,7 @@ thread_local! {
     static COMBO_HWND:       Cell<Hwnd>                = Cell::new(0);
     static DISPLAY_HWND:     Cell<Hwnd>                = Cell::new(0);
     static SETTINGS_CTRLS:  RefCell<Option<SettingsControls>> = RefCell::new(None);
+    static CURRENT_DPI:      Cell<u32>                 = Cell::new(96);
 
     // Edit-preset dialog state
     static EDIT_NAME_HWND:   Cell<Hwnd>   = Cell::new(0);
@@ -176,6 +181,9 @@ unsafe extern "system" {
     fn GetSysColorBrush(n_index: i32) -> isize;
     fn MoveWindow(hwnd: Hwnd, x: i32, y: i32, w: i32, h: i32, repaint: i32) -> i32;
     fn InvalidateRect(hwnd: Hwnd, lp_rect: *const Rect, b_erase: i32) -> i32;
+    fn SetWindowPos(hwnd: Hwnd, hwnd_insert_after: Hwnd, x: i32, y: i32, cx: i32, cy: i32, flags: u32) -> i32;
+    fn GetDpiForSystem() -> u32;
+    fn GetDpiForWindow(hwnd: Hwnd) -> u32;
 }
 
 const MAPVK_VK_TO_VSC: u32 = 0;
@@ -212,25 +220,31 @@ fn read_hwnd_text(hwnd: Hwnd) -> String {
     }
 }
 
+fn scale(px: i32, dpi: u32) -> i32 {
+    px * dpi as i32 / 96
+}
+
 fn layout_settings(client_w: i32, client_h: i32) {
     let snap = SETTINGS_CTRLS.with(|c| c.borrow().clone());
     let Some(c) = snap else { return; };
-    let m       = 12i32;
-    let cw      = client_w - 2 * m;
-    let btn_h   = 26i32;
-    let btn_y   = client_h - m - btn_h;
+    let dpi   = CURRENT_DPI.with(|d| d.get());
+    let s     = |px: i32| scale(px, dpi);
+    let m     = s(12);
+    let cw    = client_w - 2 * m;
+    let btn_h = s(26);
+    let btn_y = client_h - m - btn_h;
     unsafe {
-        MoveWindow(c.instruction,                         m,        12,  cw,  18,    1);
-        MoveWindow(c.hotkey_label,                        m,        36,  cw,  18,    1);
-        MoveWindow(DISPLAY_HWND.with(|h| h.get()),        m,        56,  cw,  26,    1);
-        MoveWindow(c.mode_label,                          m,        98,  cw,  18,    1);
-        MoveWindow(COMBO_HWND.with(|h| h.get()),          m,        118, cw,  120,   1);
-        MoveWindow(c.edit_btn,                            m,        148, 68,  btn_h, 1);
-        MoveWindow(c.add_btn,                             m + 76,   148, 68,  btn_h, 1);
-        MoveWindow(c.del_btn,                             m + 152,  148, 68,  btn_h, 1);
-        MoveWindow(c.apply_btn,                           m,        btn_y, 80, btn_h, 1);
-        MoveWindow(c.default_btn,                         m + 90,   btn_y, 80, btn_h, 1);
-        MoveWindow(c.cancel_btn,                          m + 180,  btn_y, 80, btn_h, 1);
+        MoveWindow(c.instruction,                         m,           s(12),  cw,     s(18),  1);
+        MoveWindow(c.hotkey_label,                        m,           s(36),  cw,     s(18),  1);
+        MoveWindow(DISPLAY_HWND.with(|h| h.get()),        m,           s(56),  cw,     s(26),  1);
+        MoveWindow(c.mode_label,                          m,           s(98),  cw,     s(18),  1);
+        MoveWindow(COMBO_HWND.with(|h| h.get()),          m,           s(118), cw,     s(120), 1);
+        MoveWindow(c.edit_btn,                            m,           s(148), s(68),  btn_h,  1);
+        MoveWindow(c.add_btn,                             m + s(76),   s(148), s(68),  btn_h,  1);
+        MoveWindow(c.del_btn,                             m + s(152),  s(148), s(68),  btn_h,  1);
+        MoveWindow(c.apply_btn,                           m,           btn_y,  s(80),  btn_h,  1);
+        MoveWindow(c.default_btn,                         m + s(90),   btn_y,  s(80),  btn_h,  1);
+        MoveWindow(c.cancel_btn,                          m + s(180),  btn_y,  s(80),  btn_h,  1);
         InvalidateRect(DISPLAY_HWND.with(|h| h.get()), std::ptr::null(), 1);
     }
 }
@@ -412,8 +426,26 @@ unsafe extern "system" fn wnd_proc(hwnd: isize, msg: u32, wp: usize, lp: isize) 
         return 0;
     }
     if msg == WM_GETMINMAXINFO {
-        let info = &mut *(lp as *mut MinMaxInfo);
-        info.pt_min_track_size = Point { x: 330, y: 270 };
+        let dpi = CURRENT_DPI.with(|d| d.get());
+        unsafe {
+            let info = &mut *(lp as *mut MinMaxInfo);
+            info.pt_min_track_size = Point { x: scale(330, dpi), y: scale(270, dpi) };
+        }
+        return 0;
+    }
+    if msg == WM_DPICHANGED {
+        let new_dpi = (wp & 0xFFFF) as u32;
+        CURRENT_DPI.with(|d| d.set(new_dpi));
+        unsafe {
+            let rect = &*(lp as *const Rect);
+            SetWindowPos(
+                hwnd, 0,
+                rect.left, rect.top,
+                rect.right  - rect.left,
+                rect.bottom - rect.top,
+                SWP_NOZORDER | SWP_NOACTIVATE,
+            );
+        }
         return 0;
     }
     if msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN {
@@ -500,11 +532,15 @@ unsafe extern "system" fn wnd_proc(hwnd: isize, msg: u32, wp: usize, lp: isize) 
     }
     if msg == WM_DESTROY {
         unsafe {
+            let dpi = CURRENT_DPI.with(|d| d.get());
             let mut rc = Rect { left: 0, top: 0, right: 0, bottom: 0 };
             GetWindowRect(hwnd, &mut rc);
-            let w = (rc.right  - rc.left) as u32;
-            let h = (rc.bottom - rc.top)  as u32;
-            save_settings_size_to_config(w, h);
+            let w_phys = (rc.right  - rc.left) as i32;
+            let h_phys = (rc.bottom - rc.top)  as i32;
+            // Convert physical → logical so the saved size is DPI-independent
+            let w_log = (w_phys * 96 / dpi as i32) as u32;
+            let h_log = (h_phys * 96 / dpi as i32) as u32;
+            save_settings_size_to_config(w_log, h_log);
         }
         SETTINGS_CTRLS.with(|c| *c.borrow_mut() = None);
         OPEN.store(false, Ordering::SeqCst);
@@ -537,16 +573,32 @@ fn run_dialog(current_hotkey: String, modes: Vec<ModeConfig>, active_mode: Strin
         };
         RegisterClassExW(&wc);
 
+        // Scale logical window size to physical pixels for the system DPI.
+        // WM_DPICHANGED handles subsequent moves to monitors with different DPI.
+        let sys_dpi = GetDpiForSystem();
+        CURRENT_DPI.with(|d| d.set(sys_dpi));
+        let (init_w_log, init_h_log) = load_settings_size();
+        let init_w = scale(init_w_log as i32, sys_dpi);
+        let init_h = scale(init_h_log as i32, sys_dpi);
+
         let title = wide("Dictaphile \u{2013} Settings");
-        let (init_w, init_h) = load_settings_size();
         let hwnd = CreateWindowExW(
             WS_EX_TOPMOST,
             cls_name.as_ptr(), title.as_ptr(),
             WS_CAPTION | WS_SYSMENU | WS_VISIBLE | WS_THICKFRAME,
-            CW_USEDEFAULT, CW_USEDEFAULT, init_w as i32, init_h as i32,
+            CW_USEDEFAULT, CW_USEDEFAULT, init_w, init_h,
             0, 0, hinst, std::ptr::null(),
         );
         if hwnd == 0 { OPEN.store(false, Ordering::SeqCst); return; }
+
+        // Refine to the actual monitor DPI (may differ from system DPI on multi-monitor setups)
+        let mon_dpi = GetDpiForWindow(hwnd);
+        if mon_dpi > 0 && mon_dpi != sys_dpi {
+            CURRENT_DPI.with(|d| d.set(mon_dpi));
+            let w = scale(init_w_log as i32, mon_dpi);
+            let h = scale(init_h_log as i32, mon_dpi);
+            SetWindowPos(hwnd, 0, 0, 0, w, h, SWP_NOZORDER | SWP_NOMOVE | SWP_NOACTIVATE);
+        }
 
         // Instruction
         let instruction = CreateWindowExW(0, wide("STATIC").as_ptr(),
@@ -719,5 +771,42 @@ mod tests {
         assert_eq!(result.hotkey, "Alt+R");
         assert_eq!(result.mode_name, "Distill");
         assert_eq!(result.modes.len(), 1);
+    }
+
+    #[test]
+    fn dpi_scale_at_100pct_is_identity() {
+        assert_eq!(scale(100, 96), 100);
+        assert_eq!(scale(480, 96), 480);
+        assert_eq!(scale(290, 96), 290);
+        assert_eq!(scale(0,   96), 0);
+    }
+
+    #[test]
+    fn dpi_scale_at_200pct_doubles() {
+        assert_eq!(scale(100, 192), 200);
+        assert_eq!(scale(480, 192), 960);
+        assert_eq!(scale(290, 192), 580);
+    }
+
+    #[test]
+    fn dpi_scale_at_150pct() {
+        assert_eq!(scale(100, 144), 150);
+        assert_eq!(scale(480, 144), 720);
+    }
+
+    #[test]
+    fn dpi_scale_at_125pct() {
+        assert_eq!(scale(100, 120), 125);
+        assert_eq!(scale(480, 120), 600);
+    }
+
+    #[test]
+    fn dpi_scale_round_trips_via_unscale() {
+        for dpi in [96u32, 120, 144, 192] {
+            let logical = 480i32;
+            let physical = scale(logical, dpi);
+            // physical * 96 / dpi should recover logical
+            assert_eq!(physical * 96 / dpi as i32, logical, "dpi={dpi}");
+        }
     }
 }
