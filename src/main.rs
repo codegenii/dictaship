@@ -39,7 +39,7 @@ fn main() -> Result<()> {
     let event_loop = EventLoopBuilder::new().build();
 
     let manager = GlobalHotKeyManager::new()?;
-    let hotkey_str = cfg.hotkey.clone().unwrap_or_else(|| "Alt+Q".to_string());
+    let hotkey_str = cfg.hotkey.clone().unwrap_or_else(|| settings_dialog::DEFAULT_HOTKEY.to_string());
     let mut toggle = parse_hotkey(&hotkey_str)
         .ok_or_else(|| anyhow::anyhow!("invalid hotkey in config: {hotkey_str}"))?;
     let mut current_hotkey_str = hotkey_str.clone();
