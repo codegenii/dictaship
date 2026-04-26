@@ -129,8 +129,7 @@ fn main() -> Result<()> {
 
         while let Ok(ev) = tray_rx.try_recv() {
             match ev {
-                TrayIconEvent::Click { button: tray_icon::MouseButton::Left, .. }
-                | TrayIconEvent::DoubleClick { button: tray_icon::MouseButton::Left, .. } => {
+                TrayIconEvent::DoubleClick { button: tray_icon::MouseButton::Left, .. } => {
                     console_window::toggle();
                 }
                 _ => {}
