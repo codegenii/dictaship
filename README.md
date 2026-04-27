@@ -74,6 +74,10 @@ dictaphile.exe
 
 The app runs silently in the system tray. Right-click the tray icon for settings or to exit; double-click to show the log window.
 
+## Installation
+
+The installer is not code-signed. Windows SmartScreen will show a warning on first run — click **More info → Run anyway** to proceed. If you prefer not to bypass SmartScreen, build from source instead (see [Setup](#setup) above).
+
 ## Building the installer
 
 Requires [Inno Setup 6](https://jrsoftware.org/isinfo.php). Run from the repo root:
