@@ -1,6 +1,6 @@
 # dictaphile
 
-A Windows dictation tool that records audio via a global hotkey, transcribes it locally with Whisper, polishes the text with an LLM, and pastes the result wherever your cursor is.
+A Windows dictation tool that records audio via a global hotkey, transcribes it locally with Whisper, polishes the text with a local LLM, and pastes the result wherever your cursor is. No account or cloud service required — audio and text never leave your machine.
 
 ## How it works
 
