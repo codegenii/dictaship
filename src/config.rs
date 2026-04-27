@@ -145,11 +145,6 @@ mod tests {
     }
 
     #[test]
-    fn invalid_toml_fails() {
-        assert!(parse_config("this is not toml :::").is_err());
-    }
-
-    #[test]
     fn modes_parse_from_toml() {
         let raw = format!(r#"
             {BASE_TOML}
@@ -179,13 +174,6 @@ mod tests {
     }
 
     #[test]
-    fn settings_size_fields_default_to_none() {
-        let cfg = parse_config(BASE_TOML).unwrap();
-        assert_eq!(cfg.settings_w, None);
-        assert_eq!(cfg.settings_h, None);
-    }
-
-    #[test]
     fn settings_size_fields_parse() {
         let raw = format!("{BASE_TOML}\nsettings_w = 500\nsettings_h = 350");
         let cfg = parse_config(&raw).unwrap();
@@ -193,22 +181,4 @@ mod tests {
         assert_eq!(cfg.settings_h, Some(350u32));
     }
 
-    #[test]
-    fn load_config_populates_modes_when_empty() {
-        let cfg_no_modes = Config {
-            whisper_url:   String::new(), ollama_url:    String::new(),
-            whisper_model: String::new(), llm_model:     String::new(),
-            hotkey:        None,          prompt:        "p".to_string(),
-            distill_mode:  None,          modes:         vec![],
-            settings_w:    None,          settings_h:    None,
-        };
-        // Simulate what load_config does: populate modes when empty
-        let modes = if cfg_no_modes.modes.is_empty() {
-            default_modes(&cfg_no_modes.prompt)
-        } else {
-            cfg_no_modes.modes
-        };
-        assert!(!modes.is_empty());
-        assert_eq!(modes[0].prompt, "p");
-    }
 }

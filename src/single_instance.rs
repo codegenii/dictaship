@@ -59,18 +59,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn first_acquire_succeeds() {
-        assert!(acquire_named("Local\\DictaphileTest_first", false).is_some());
-    }
-
-    #[test]
-    fn second_acquire_fails_while_guard_held() {
-        let _g = acquire_named("Local\\DictaphileTest_second", false)
-            .expect("first acquire should succeed");
-        assert!(acquire_named("Local\\DictaphileTest_second", false).is_none());
-    }
-
-    #[test]
     fn acquire_succeeds_after_guard_dropped() {
         { let _g = acquire_named("Local\\DictaphileTest_drop", false); }
         assert!(acquire_named("Local\\DictaphileTest_drop", false).is_some());

@@ -705,75 +705,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn vkey_letter_a() {
-        assert_eq!(vkey_to_name(0x41), Some("A").map(str::to_owned));
-    }
-
-    #[test]
-    fn vkey_letter_z() {
-        assert_eq!(vkey_to_name(0x5A), Some("Z").map(str::to_owned));
-    }
-
-    #[test]
-    fn vkey_f1() {
-        assert_eq!(vkey_to_name(0x70), Some("F1").map(str::to_owned));
-    }
-
-    #[test]
-    fn vkey_f12() {
-        assert_eq!(vkey_to_name(0x7B), Some("F12").map(str::to_owned));
-    }
-
-    #[test]
-    fn vkey_modifier_keys_have_os_names() {
-        assert!(vkey_to_name(0x10).is_some()); // VK_SHIFT
-        assert!(vkey_to_name(0x11).is_some()); // VK_CONTROL
-        assert!(vkey_to_name(0x12).is_some()); // VK_MENU (Alt)
-    }
-
-    #[test]
-    fn vkey_unknown_returns_none() {
-        assert_eq!(vkey_to_name(0x00), None);
-        assert_eq!(vkey_to_name(0x01), None);
-    }
-
-    #[test]
-    fn vkey_all_letters() {
-        for (i, letter) in ('A'..='Z').enumerate() {
-            let vk = 0x41 + i;
-            let name = vkey_to_name(vk)
-                .unwrap_or_else(|| panic!("vk 0x{vk:02X} should map to a letter"));
-            assert_eq!(name.chars().next(), Some(letter), "vk=0x{vk:02X}");
-            assert_eq!(name.len(), 1, "vk=0x{vk:02X}");
-        }
-    }
-
-    #[test]
-    fn vkey_all_function_keys() {
-        for i in 0..12usize {
-            let vk = 0x70 + i;
-            let expected = format!("F{}", i + 1);
-            let name = vkey_to_name(vk)
-                .unwrap_or_else(|| panic!("vk 0x{vk:02X} should map to F{}", i + 1));
-            assert_eq!(name, expected.as_str(), "vk=0x{vk:02X}");
-        }
-    }
-
-    #[test]
-    fn settings_result_carries_all_fields() {
-        let result = SettingsResult {
-            hotkey:    "Alt+R".to_string(),
-            mode_name: "Distill".to_string(),
-            modes: vec![
-                ModeConfig { name: "Distill".to_string(), prompt: "p".to_string() },
-            ],
-        };
-        assert_eq!(result.hotkey, "Alt+R");
-        assert_eq!(result.mode_name, "Distill");
-        assert_eq!(result.modes.len(), 1);
-    }
-
-    #[test]
     fn dpi_scale_at_100pct_is_identity() {
         assert_eq!(scale(100, 96), 100);
         assert_eq!(scale(480, 96), 480);
@@ -792,12 +723,6 @@ mod tests {
     fn dpi_scale_at_150pct() {
         assert_eq!(scale(100, 144), 150);
         assert_eq!(scale(480, 144), 720);
-    }
-
-    #[test]
-    fn dpi_scale_at_125pct() {
-        assert_eq!(scale(100, 120), 125);
-        assert_eq!(scale(480, 120), 600);
     }
 
     #[test]

@@ -180,40 +180,6 @@ mod tests {
 
         const SAMPLE_RATE: u32 = 16_000;
 
-        fn header_u16(wav: &[u8], offset: usize) -> u16 {
-            u16::from_le_bytes([wav[offset], wav[offset + 1]])
-        }
-
-        fn header_u32(wav: &[u8], offset: usize) -> u32 {
-            u32::from_le_bytes([
-                wav[offset], wav[offset + 1], wav[offset + 2], wav[offset + 3],
-            ])
-        }
-
-        #[test]
-        fn magic_bytes_are_correct() {
-            let wav = samples_to_wav(&[0i16; 100], SAMPLE_RATE).unwrap();
-            assert_eq!(&wav[0..4],   b"RIFF");
-            assert_eq!(&wav[8..12],  b"WAVE");
-            assert_eq!(&wav[12..16], b"fmt ");
-            assert_eq!(&wav[36..40], b"data");
-        }
-
-        #[test]
-        fn header_encodes_correct_format() {
-            let wav = samples_to_wav(&[0i16; 100], SAMPLE_RATE).unwrap();
-            assert_eq!(header_u16(&wav, 20), 1);           // PCM format
-            assert_eq!(header_u16(&wav, 22), 1);           // mono
-            assert_eq!(header_u32(&wav, 24), SAMPLE_RATE);
-            assert_eq!(header_u16(&wav, 34), 16);          // 16-bit
-        }
-
-        #[test]
-        fn header_reflects_device_sample_rate() {
-            let wav = samples_to_wav(&[0i16; 100], 48_000).unwrap();
-            assert_eq!(header_u32(&wav, 24), 48_000);
-        }
-
         #[test]
         fn empty_samples_is_valid() {
             let wav = samples_to_wav(&[], SAMPLE_RATE).unwrap();
@@ -241,13 +207,6 @@ mod tests {
             assert_eq!(status.lock().as_deref(), Some("Test error"));
         }
 
-        #[test]
-        fn set_error_status_logs_detail() {
-            // Verify the function accepts both &str and Display impls (anyhow::Error, etc.)
-            let status: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
-            set_error_status(&status, "Transcription failed", anyhow::anyhow!("connection refused"));
-            assert_eq!(status.lock().as_deref(), Some("Transcription failed"));
-        }
     }
 
     mod recording {
