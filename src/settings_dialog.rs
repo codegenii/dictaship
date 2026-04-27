@@ -734,4 +734,19 @@ mod tests {
             assert_eq!(physical * 96 / dpi as i32, logical, "dpi={dpi}");
         }
     }
+
+    #[test]
+    fn dpi_scale_zero_input() {
+        for dpi in [96u32, 120, 144, 192] {
+            assert_eq!(scale(0, dpi), 0, "dpi={dpi}");
+        }
+    }
+
+    #[test]
+    fn dpi_scale_large_realistic_value() {
+        // 8K display width (7680 logical px) at common DPI settings
+        assert_eq!(scale(7680, 96),  7680);
+        assert_eq!(scale(7680, 192), 15360);
+        assert_eq!(scale(7680, 144), 11520);
+    }
 }

@@ -33,19 +33,22 @@ pub fn parse_hotkey(s: &str) -> Option<HotKey> {
     Some(HotKey::new(if mods.is_empty() { None } else { Some(mods) }, code))
 }
 
-pub fn save_hotkey_to_config(hotkey_str: &str) {
-    let path = "config.toml";
-    let Ok(content) = std::fs::read_to_string(path) else { return };
+fn apply_hotkey(content: &str, hotkey_str: &str) -> String {
     let line = format!("hotkey = \"{}\"", hotkey_str);
-    let new_content = if content.lines().any(|l| l.trim_start().starts_with("hotkey")) {
+    if content.lines().any(|l| l.trim_start().starts_with("hotkey")) {
         content.lines()
             .map(|l| if l.trim_start().starts_with("hotkey") { line.as_str() } else { l })
             .collect::<Vec<_>>()
             .join("\r\n")
     } else {
         format!("{}\n{}\n", content.trim_end(), line)
-    };
-    let _ = std::fs::write(path, new_content);
+    }
+}
+
+pub fn save_hotkey_to_config(hotkey_str: &str) {
+    let path = "config.toml";
+    let Ok(content) = std::fs::read_to_string(path) else { return };
+    let _ = std::fs::write(path, apply_hotkey(&content, hotkey_str));
 }
 
 #[cfg(test)]
@@ -78,5 +81,52 @@ mod tests {
     #[test]
     fn default_hotkey_is_valid() {
         assert!(parse_hotkey(crate::settings_dialog::DEFAULT_HOTKEY).is_some());
+    }
+
+    #[test]
+    fn hotkey_parsing_is_case_insensitive() {
+        let lower = parse_hotkey("ctrl+alt+r").unwrap();
+        let mixed = parse_hotkey("Ctrl+Alt+R").unwrap();
+        assert_eq!(lower.id(), mixed.id());
+    }
+
+    #[test]
+    fn win_modifier_parses() {
+        assert!(parse_hotkey("Win+R").is_some());
+        assert!(parse_hotkey("Meta+R").is_some());
+        // Both spellings produce the same hotkey
+        assert_eq!(
+            parse_hotkey("Win+R").unwrap().id(),
+            parse_hotkey("Meta+R").unwrap().id(),
+        );
+    }
+
+    #[test]
+    fn bare_key_without_modifier_parses() {
+        assert!(parse_hotkey("Q").is_some());
+        assert!(parse_hotkey("F5").is_some());
+    }
+
+    #[test]
+    fn save_hotkey_replaces_existing_line() {
+        let content = "whisper_url = \"x\"\nhotkey = \"Alt+R\"\nllm_model = \"y\"";
+        let result = apply_hotkey(content, "Alt+W");
+        assert!(result.contains("hotkey = \"Alt+W\""), "new key present");
+        assert!(!result.contains("Alt+R"),             "old key removed");
+        assert!(result.contains("whisper_url"),        "other fields preserved");
+        assert!(result.contains("llm_model"),          "other fields preserved");
+        let hotkey_lines = result.lines().filter(|l| l.trim_start().starts_with("hotkey")).count();
+        assert_eq!(hotkey_lines, 1, "exactly one hotkey line");
+    }
+
+    #[test]
+    fn save_hotkey_appends_when_missing() {
+        let content = "whisper_url = \"x\"\nllm_model = \"y\"";
+        let result = apply_hotkey(content, "Alt+W");
+        assert!(result.contains("hotkey = \"Alt+W\""), "hotkey appended");
+        assert!(result.contains("whisper_url"),        "other fields preserved");
+        assert!(result.contains("llm_model"),          "other fields preserved");
+        let hotkey_lines = result.lines().filter(|l| l.trim_start().starts_with("hotkey")).count();
+        assert_eq!(hotkey_lines, 1, "exactly one hotkey line");
     }
 }

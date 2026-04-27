@@ -188,6 +188,12 @@ mod tests {
         }
 
         #[test]
+        fn single_sample_has_correct_data_size() {
+            let wav = samples_to_wav(&[1000i16], SAMPLE_RATE).unwrap();
+            assert_eq!(header_u32(&wav, 40), 2); // 1 sample × 2 bytes (i16)
+        }
+
+        #[test]
         fn samples_round_trip() {
             let original: Vec<i16> = (0..64).map(|i| (i * 100) as i16).collect();
             let wav = samples_to_wav(&original, SAMPLE_RATE).unwrap();
@@ -229,6 +235,11 @@ mod tests {
             let rate = 48_000u32;
             assert!(is_too_short(&vec![0i16; rate as usize / 2 - 1], rate));
             assert!(!is_too_short(&vec![0i16; rate as usize / 2], rate));
+        }
+
+        #[test]
+        fn zero_samples_is_too_short() {
+            assert!(is_too_short(&[], SAMPLE_RATE));
         }
     }
 }

@@ -37,7 +37,11 @@ unsafe extern "system" {
 fn wide_truncate<const N: usize>(s: &str) -> [u16; N] {
     let mut buf = [0u16; N];
     let encoded: Vec<u16> = OsStr::new(s).encode_wide().collect();
-    let len = encoded.len().min(N - 1);
+    let mut len = encoded.len().min(N - 1);
+    // Don't leave a dangling high surrogate at the clip point
+    if len > 0 && (0xD800..=0xDBFF).contains(&encoded[len - 1]) {
+        len -= 1;
+    }
     buf[..len].copy_from_slice(&encoded[..len]);
     buf
 }
@@ -104,5 +108,26 @@ mod tests {
         assert_eq!(buf[1], b'B' as u16);
         assert_eq!(buf[2], b'C' as u16);
         assert_eq!(buf[3], 0);
+    }
+
+    #[test]
+    fn wide_truncate_non_ascii_encodes_correctly() {
+        // é = U+00E9: a single UTF-16 code unit
+        let buf: [u16; 4] = wide_truncate("éx");
+        assert_eq!(buf[0], 0x00E9);
+        assert_eq!(buf[1], b'x' as u16);
+        assert_eq!(buf[2], 0);
+    }
+
+    #[test]
+    fn wide_truncate_does_not_split_surrogate_pair() {
+        // 😀 = U+1F600, encoded as [0xD83D, 0xDE00] in UTF-16 (2 code units).
+        // A 4-element buffer holds "AB" + NUL with one slot left — not enough for
+        // the full surrogate pair. The emoji must be dropped entirely, not left as
+        // a dangling high surrogate (0xD83D alone is invalid UTF-16).
+        let buf: [u16; 4] = wide_truncate("AB\u{1F600}");
+        assert_eq!(buf[0], b'A' as u16);
+        assert_eq!(buf[1], b'B' as u16);
+        assert_eq!(buf[2], 0, "high surrogate must not appear without its low surrogate");
     }
 }

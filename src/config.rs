@@ -181,4 +181,20 @@ mod tests {
         assert_eq!(cfg.settings_h, Some(350u32));
     }
 
+    #[test]
+    fn reserialize_preserves_all_fields() {
+        let tmp = std::env::temp_dir().join("dictaphile_reserialize_test.toml");
+        std::fs::write(&tmp, BASE_TOML).unwrap();
+        reserialize(tmp.to_str().unwrap(), |cfg| {
+            cfg.hotkey = Some("Alt+X".to_string());
+        });
+        let content = std::fs::read_to_string(&tmp).unwrap();
+        std::fs::remove_file(&tmp).ok();
+        let cfg = parse_config(&content).unwrap();
+        assert_eq!(cfg.hotkey.as_deref(), Some("Alt+X"));
+        assert_eq!(cfg.llm_model, "qwen2.5:7b-instruct");
+        assert_eq!(cfg.whisper_model, "whisper-large-turbo");
+        assert_eq!(cfg.whisper_url, "http://localhost:8080/v1/audio/transcriptions");
+    }
+
 }
