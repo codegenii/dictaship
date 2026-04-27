@@ -12,6 +12,8 @@ A Windows dictation tool that records audio via a global hotkey, transcribes it 
 
 Hotkey, LLM endpoint, distillation mode, and custom prompts are all configurable via the tray icon → **Settings**.
 
+Enable **Passthrough mode** from the tray menu to skip the LLM step entirely — the raw Whisper transcript is pasted as-is. Useful when you want faster transcription without cleanup.
+
 ## Prerequisites
 
 | Dependency | Purpose |
