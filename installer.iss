@@ -38,6 +38,8 @@ Name: startup; Description: "Start {#AppName} automatically when Windows starts"
 Source: "target\release\{#AppExe}"; DestDir: "{app}"; Flags: ignoreversion
 ; Config: installed only on first install; never removed on uninstall (preserves user settings)
 Source: "config.toml"; DestDir: "{app}"; Flags: onlyifdoesntexist uninsneveruninstall
+; Third-party license attribution (Apache-2.0 distribution requirement)
+Source: "THIRD_PARTY_LICENSES.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#AppName}";           Filename: "{app}\{#AppExe}"; WorkingDir: "{app}"
