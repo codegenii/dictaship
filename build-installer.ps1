@@ -36,4 +36,4 @@ Write-Host "Compiling installer ($IsccPath)..." -ForegroundColor Cyan
 & $IsccPath /DAppVersion=$version installer.iss
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host "Done: installer\DictaphileSetup.exe" -ForegroundColor Green
+Write-Host "Done: installer\DictashipSetup.exe" -ForegroundColor Green

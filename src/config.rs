@@ -191,7 +191,7 @@ mod tests {
 
     #[test]
     fn reserialize_preserves_all_fields() {
-        let tmp = std::env::temp_dir().join("dictaphile_reserialize_test.toml");
+        let tmp = std::env::temp_dir().join("dictaship_reserialize_test.toml");
         std::fs::write(&tmp, BASE_TOML).unwrap();
         reserialize(&tmp, |cfg| {
             cfg.hotkey = Some("Alt+X".to_string());

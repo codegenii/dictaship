@@ -67,7 +67,7 @@ fn notify(text: &str) {
         dw_state_mask:      0,
         sz_info:            wide_truncate(text),
         u_version:          0,
-        sz_info_title:      wide_truncate("Dictaphile"),
+        sz_info_title:      wide_truncate("Dictaship"),
         dw_info_flags:      NIIF_NOSOUND,
     };
     unsafe { Shell_NotifyIconW(NIM_MODIFY, &mut nid); }

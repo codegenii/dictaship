@@ -1,4 +1,4 @@
-# dictaphile
+# dictaship
 
 A Windows dictation tool that records audio via a global hotkey, transcribes it locally with Whisper, polishes the text with a local LLM, and pastes the result wherever your cursor is. No account or cloud service required — audio and text never leave your machine.
 
@@ -43,7 +43,7 @@ Or use your favourite LLM runner — any service that exposes an Ollama-compatib
 **3. Clone and build** (use the x64 Native Tools Command Prompt for VS)
 ```
 git clone <repo>
-cd dictaphile
+cd dictaship
 cargo build --release
 ```
 
@@ -69,7 +69,7 @@ Output ONLY the rewritten text, no preamble.
 
 **5. Run**
 ```
-dictaphile.exe
+dictaship.exe
 ```
 
 The app runs silently in the system tray. Right-click the tray icon for settings or to exit; double-click to show the log window.
@@ -86,12 +86,12 @@ Requires [Inno Setup 6](https://jrsoftware.org/isinfo.php). Run from the repo ro
 .\build-installer.ps1
 ```
 
-This runs `cargo build --release` and then compiles `installer.iss`. Output: `installer\DictaphileSetup.exe`.
+This runs `cargo build --release` and then compiles `installer.iss`. Output: `installer\DictashipSetup.exe`.
 
 The installer:
-- Installs to `%LocalAppData%\Dictaphile` (no UAC prompt)
+- Installs to `%LocalAppData%\Dictaship` (no UAC prompt)
 - Creates a Start Menu shortcut
-- Optionally adds Dictaphile to Windows startup (checked by default)
+- Optionally adds Dictaship to Windows startup (checked by default)
 - Ships a default `config.toml` on first install; upgrades never overwrite it
 
 ## Running tests

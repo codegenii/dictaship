@@ -1,14 +1,14 @@
-; Dictaphile installer — Inno Setup 6
+; Dictaship installer — Inno Setup 6
 ; https://jrsoftware.org/isinfo.php
 ;
 ; Build steps:
 ;   1. cargo build --release
 ;   2. iscc installer.iss          (or: .\build-installer.ps1)
-; Output: installer\DictaphileSetup.exe
+; Output: installer\DictashipSetup.exe
 
-#define AppName "Dictaphile"
+#define AppName "Dictaship"
 ; AppVersion is passed by build-installer.ps1 via /DAppVersion=<version>
-#define AppExe  "dictaphile.exe"
+#define AppExe  "dictaship.exe"
 
 [Setup]
 AppName={#AppName}
@@ -19,7 +19,7 @@ DefaultDirName={localappdata}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 OutputDir=installer
-OutputBaseFilename=DictaphileSetup
+OutputBaseFilename=DictashipSetup
 Compression=lzma2
 SolidCompression=yes
 PrivilegesRequired=lowest

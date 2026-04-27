@@ -37,8 +37,8 @@ fn acquire_named(name: &str, show_dialog: bool) -> Option<InstanceGuard> {
     let handle = unsafe { CreateMutexW(std::ptr::null(), 0, wname.as_ptr()) };
     if handle != 0 && unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
         if show_dialog {
-            let text    = wide("Dictaphile is already running.\nCheck the system tray.");
-            let caption = wide("Dictaphile");
+            let text    = wide("Dictaship is already running.\nCheck the system tray.");
+            let caption = wide("Dictaship");
             unsafe { MessageBoxW(0, text.as_ptr(), caption.as_ptr(), MB_OK | MB_ICONINFORMATION); }
         }
         unsafe { CloseHandle(handle); }
@@ -51,7 +51,7 @@ fn acquire_named(name: &str, show_dialog: bool) -> Option<InstanceGuard> {
 /// Returns a guard that must be kept alive for the process duration.
 /// Returns None and shows a message box if another instance is already running.
 pub fn acquire() -> Option<InstanceGuard> {
-    acquire_named("Local\\DictaphileApp", true)
+    acquire_named("Local\\DictashipApp", true)
 }
 
 #[cfg(test)]
@@ -60,7 +60,7 @@ mod tests {
 
     #[test]
     fn acquire_succeeds_after_guard_dropped() {
-        { let _g = acquire_named("Local\\DictaphileTest_drop", false); }
-        assert!(acquire_named("Local\\DictaphileTest_drop", false).is_some());
+        { let _g = acquire_named("Local\\DictashipTest_drop", false); }
+        assert!(acquire_named("Local\\DictashipTest_drop", false).is_some());
     }
 }

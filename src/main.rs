@@ -62,7 +62,7 @@ fn main() -> Result<()> {
     let tray = TrayIconBuilder::new()
         .with_icon(icon_for_status(None))
         .with_menu(Box::new(tray_menu))
-        .with_tooltip(format!("Dictaphile – {current_hotkey_str} to record"))
+        .with_tooltip(format!("Dictaship – {current_hotkey_str} to record"))
         .build()
         .expect("tray icon");
 
@@ -95,7 +95,7 @@ fn main() -> Result<()> {
                     tray_balloon::show(text);
                 }
                 None => {
-                    tray.set_tooltip(Some(format!("Dictaphile – {current_hotkey_str} to record"))).ok();
+                    tray.set_tooltip(Some(format!("Dictaship – {current_hotkey_str} to record"))).ok();
                     tray_balloon::clear();
                 }
             }
@@ -108,7 +108,7 @@ fn main() -> Result<()> {
                 let _ = manager.unregister(toggle);
                 toggle = new_hotkey;
                 current_hotkey_str = result.hotkey.clone();
-                tray.set_tooltip(Some(format!("Dictaphile – {} to record", result.hotkey))).ok();
+                tray.set_tooltip(Some(format!("Dictaship – {} to record", result.hotkey))).ok();
                 if manager.register(toggle).is_err() {
                     eprintln!("failed to register hotkey {}", result.hotkey);
                 } else {

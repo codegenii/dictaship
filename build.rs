@@ -13,17 +13,17 @@ fn main() {
         // Declares Common Controls v6, Windows 10/11 compatibility, PerMonitorV2 DPI awareness.
         let manifest = env::current_dir()
             .unwrap()
-            .join("dictaphile.exe.manifest");
-        println!("cargo:rerun-if-changed=dictaphile.exe.manifest");
+            .join("dictaship.exe.manifest");
+        println!("cargo:rerun-if-changed=dictaship.exe.manifest");
         println!("cargo:rustc-link-arg=/MANIFESTINPUT:{}", manifest.display());
         println!("cargo:rustc-link-arg=/MANIFEST:EMBED");
 
         // Compile the VS_VERSIONINFO resource so right-click → Properties → Details is populated.
         // Version numbers are read from CARGO_PKG_VERSION automatically.
         let mut res = winres::WindowsResource::new();
-        res.set("ProductName",      "Dictaphile");
+        res.set("ProductName",      "Dictaship");
         res.set("FileDescription",  "Voice dictation with AI distillation");
-        res.set("OriginalFilename", "dictaphile.exe");
+        res.set("OriginalFilename", "dictaship.exe");
         res.set("LegalCopyright",   "Copyright \u{00A9} 2025 Evgenii Grebeniuk");
         res.compile().expect("failed to compile version resource");
     }
