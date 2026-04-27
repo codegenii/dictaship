@@ -10,7 +10,11 @@ use crate::config::Config;
 #[derive(serde::Deserialize)]
 struct WhisperResp { text: String }
 #[derive(serde::Deserialize)]
-struct OllamaResp  { response: String }
+#[serde(untagged)]
+enum OllamaResp {
+    Ok    { response: String },
+    Error { error: String },
+}
 
 pub struct Recorder {
     samples:     Arc<Mutex<Vec<i16>>>,
@@ -91,8 +95,10 @@ fn distill(text: &str, cfg: &Config, prompt: &str) -> Result<String> {
         "prompt": format!("{prompt}{text}"),
         "stream": false,
     });
-    let resp: OllamaResp = client.post(&cfg.ollama_url).json(&body).send()?.json()?;
-    Ok(resp.response.trim().to_string())
+    match client.post(&cfg.ollama_url).json(&body).send()?.json()? {
+        OllamaResp::Ok    { response } => Ok(response.trim().to_string()),
+        OllamaResp::Error { error }    => Err(anyhow::anyhow!("llm: {error}")),
+    }
 }
 
 fn paste(text: &str) -> Result<()> {
