@@ -1,5 +1,6 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
 pub struct ModeConfig {
@@ -54,12 +55,19 @@ pub fn default_modes(legacy_prompt: &str) -> Vec<ModeConfig> {
     ]
 }
 
+fn config_path() -> PathBuf {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("config.toml")))
+        .unwrap_or_else(|| PathBuf::from("config.toml"))
+}
+
 pub fn parse_config(raw: &str) -> Result<Config> {
     toml::from_str(raw).map_err(|e| anyhow::anyhow!("invalid config.toml: {e}"))
 }
 
 pub fn load_config() -> Result<Config> {
-    let raw = std::fs::read_to_string("config.toml")
+    let raw = std::fs::read_to_string(config_path())
         .map_err(|e| anyhow::anyhow!("cannot read config.toml: {e}"))?;
     let mut cfg = parse_config(&raw)?;
     if cfg.modes.is_empty() {
@@ -68,7 +76,7 @@ pub fn load_config() -> Result<Config> {
     Ok(cfg)
 }
 
-fn reserialize(path: &str, f: impl FnOnce(&mut Config)) {
+fn reserialize(path: &Path, f: impl FnOnce(&mut Config)) {
     let Ok(content) = std::fs::read_to_string(path) else { return };
     let Ok(mut cfg) = toml::from_str::<Config>(&content) else { return };
     f(&mut cfg);
@@ -78,18 +86,18 @@ fn reserialize(path: &str, f: impl FnOnce(&mut Config)) {
 }
 
 pub fn save_distill_mode_to_config(mode_name: &str) {
-    reserialize("config.toml", |cfg| cfg.distill_mode = Some(mode_name.to_string()));
+    reserialize(&config_path(), |cfg| cfg.distill_mode = Some(mode_name.to_string()));
 }
 
 pub fn save_modes_to_config(modes: &[ModeConfig]) {
-    reserialize("config.toml", |cfg| cfg.modes = modes.to_vec());
+    reserialize(&config_path(), |cfg| cfg.modes = modes.to_vec());
 }
 
 pub const DEFAULT_SETTINGS_W: u32 = 480;
 pub const DEFAULT_SETTINGS_H: u32 = 290;
 
 pub fn load_settings_size() -> (u32, u32) {
-    let raw = std::fs::read_to_string("config.toml").unwrap_or_default();
+    let raw = std::fs::read_to_string(config_path()).unwrap_or_default();
     let Ok(cfg) = toml::from_str::<Config>(&raw) else {
         return (DEFAULT_SETTINGS_W, DEFAULT_SETTINGS_H);
     };
@@ -100,7 +108,7 @@ pub fn load_settings_size() -> (u32, u32) {
 }
 
 pub fn save_settings_size_to_config(w: u32, h: u32) {
-    reserialize("config.toml", |cfg| {
+    reserialize(&config_path(), |cfg| {
         cfg.settings_w = Some(w);
         cfg.settings_h = Some(h);
     });
@@ -185,7 +193,7 @@ mod tests {
     fn reserialize_preserves_all_fields() {
         let tmp = std::env::temp_dir().join("dictaphile_reserialize_test.toml");
         std::fs::write(&tmp, BASE_TOML).unwrap();
-        reserialize(tmp.to_str().unwrap(), |cfg| {
+        reserialize(&tmp, |cfg| {
             cfg.hotkey = Some("Alt+X".to_string());
         });
         let content = std::fs::read_to_string(&tmp).unwrap();
