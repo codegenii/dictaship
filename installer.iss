@@ -6,9 +6,9 @@
 ;   2. iscc installer.iss          (or: .\build-installer.ps1)
 ; Output: installer\DictaphileSetup.exe
 
-#define AppName    "Dictaphile"
-#define AppVersion "0.1.0"
-#define AppExe     "dictaphile.exe"
+#define AppName "Dictaphile"
+; AppVersion is passed by build-installer.ps1 via /DAppVersion=<version>
+#define AppExe  "dictaphile.exe"
 
 [Setup]
 AppName={#AppName}

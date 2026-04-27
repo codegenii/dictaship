@@ -29,8 +29,11 @@ if (-not $IsccPath) {
     exit 1
 }
 
+$version = (Select-String -Path "Cargo.toml" -Pattern '^version\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+Write-Host "Version: $version" -ForegroundColor Cyan
+
 Write-Host "Compiling installer ($IsccPath)..." -ForegroundColor Cyan
-& $IsccPath installer.iss
+& $IsccPath /DAppVersion=$version installer.iss
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "Done: installer\DictaphileSetup.exe" -ForegroundColor Green
