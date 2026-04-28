@@ -4,7 +4,7 @@ A Windows dictation tool that records audio via a global hotkey, transcribes it 
 
 ## How it works
 
-1. Press your configured hotkey (default **Alt+R**) — starts recording from the default microphone
+1. Press your configured hotkey (default **Alt+Backtick**) — starts recording from the default microphone
 2. Press it again — stops recording and:
    - Encodes audio as WAV and sends it to a local Whisper server
    - Sends the transcript to a local LLM for cleanup

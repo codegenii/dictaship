@@ -184,6 +184,10 @@ mod tests {
     mod wav {
         use super::*;
 
+        fn header_u32(wav: &[u8], offset: usize) -> u32 {
+            u32::from_le_bytes(wav[offset..offset + 4].try_into().unwrap())
+        }
+
         const SAMPLE_RATE: u32 = 16_000;
 
         #[test]
