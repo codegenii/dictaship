@@ -27,14 +27,6 @@ pub struct Config {
     pub settings_h:    Option<u32>,
 }
 
-impl Config {
-    pub fn active_prompt(&self, mode_name: &str) -> &str {
-        self.modes.iter()
-            .find(|m| m.name == mode_name)
-            .map(|m| m.prompt.as_str())
-            .unwrap_or(&self.prompt)
-    }
-}
 
 pub fn default_modes(legacy_prompt: &str) -> Vec<ModeConfig> {
     vec![
