@@ -2,7 +2,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-pub const PASSTHROUGH_MODE_NAME: &str = "Passthrough";
+pub const PASSTHROUGH_MODE_NAME: &str = "Verbatim";
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
 pub struct ModeConfig {
@@ -33,13 +33,8 @@ pub struct Config {
 pub fn default_modes(legacy_prompt: &str) -> Vec<ModeConfig> {
     vec![
         ModeConfig {
-            name:   "Distill".to_string(),
+            name:   "Prompt".to_string(),
             prompt: legacy_prompt.to_string(),
-        },
-        ModeConfig {
-            name:   "Translate to English".to_string(),
-            prompt: "Translate the following speech to English. \
-                     Output ONLY the translation, no preamble.\n\n---\n".to_string(),
         },
         ModeConfig {
             name:   "Clean text".to_string(),
@@ -176,9 +171,9 @@ mod tests {
     #[test]
     fn default_modes_uses_legacy_prompt() {
         let modes = default_modes("my-prompt");
-        assert_eq!(modes[0].name, "Distill");
+        assert_eq!(modes[0].name, "Prompt");
         assert_eq!(modes[0].prompt, "my-prompt");
-        assert!(modes.len() >= 3);
+        assert!(modes.len() >= 2);
     }
 
     #[test]
@@ -223,7 +218,7 @@ mod tests {
             prompt = "Fix grammar.\n"
 
             [[modes]]
-            name   = "Passthrough"
+            name   = "Verbatim"
             prompt = ""
         "#);
         let mut cfg = parse_config(&raw).unwrap();
