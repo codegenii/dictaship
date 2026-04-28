@@ -22,9 +22,9 @@ fn main() {
         // Version numbers are read from CARGO_PKG_VERSION automatically.
         let mut res = winres::WindowsResource::new();
         res.set("ProductName",      "Dictaship");
-        res.set("FileDescription",  "Voice dictation with AI distillation");
+        res.set("FileDescription",  "Dictaship");
         res.set("OriginalFilename", "dictaship.exe");
-        res.set("LegalCopyright",   "Copyright \u{00A9} 2025 Evgenii Grebeniuk");
+        res.set("LegalCopyright",   "Copyright \u{00A9} 2026 Evgenii Grebeniuk");
         res.compile().expect("failed to compile version resource");
     }
 }
