@@ -1,25 +1,31 @@
 # dictaship
 
-A Windows dictation tool that records audio via a global hotkey, transcribes it locally with Whisper, polishes the text with a local LLM, and pastes the result wherever your cursor is. No account or cloud service required — audio and text never leave your machine.
+A Windows dictation tool that records audio via a global hotkey, transcribes it locally with Whisper, processes the text with a local LLM, and pastes the result wherever your cursor is. No account or cloud service required — audio and text never leave your machine.
 
 ## How it works
 
-1. Press your configured hotkey (default **Alt+Backtick**) — starts recording from the default microphone
+1. Press your configured hotkey (default **Alt+`` ` ``**) — starts recording from the default microphone
 2. Press it again — stops recording and:
    - Encodes audio as WAV and sends it to a local Whisper server
-   - Sends the transcript to a local LLM for cleanup
-   - Copies the result to the clipboard and simulates Ctrl+V to paste it
+   - Sends the transcript to a local LLM using the active preset's prompt
+   - Pastes the result wherever your cursor is
 
-Hotkey, LLM endpoint, distillation mode, and custom prompts are all configurable via the tray icon → **Settings**.
+The active preset controls what the LLM does with the transcript. Three presets ship by default:
 
-Enable **Passthrough mode** from the tray menu to skip the LLM step entirely — the raw Whisper transcript is pasted as-is. Useful when you want faster transcription without cleanup.
+| Preset | What it does |
+|---|---|
+| **Prompt** | Rewrites dictation as a clean, concise English prompt for a downstream LLM — translates, removes filler, preserves intent |
+| **Clean text** | Light edit: removes interjections and fixes punctuation, minimal rewriting |
+| **Verbatim** | Skips the LLM entirely — raw Whisper transcript is pasted as-is |
+
+Switch presets by clicking the tray icon — each preset appears as a checkable item in the menu. Hotkey, LLM endpoint, and custom prompts are all configurable via the tray icon → **Settings**.
 
 ## Prerequisites
 
 | Dependency | Purpose |
 |---|---|
 | [whisper.cpp server](https://github.com/ggml-org/whisper.cpp) | Local speech-to-text |
-| An LLM runner (e.g. [Ollama](https://ollama.com), llama.cpp server, Docker) | Local LLM for text cleanup |
+| An LLM runner (e.g. [Ollama](https://ollama.com), llama.cpp server, Docker) | Local LLM for text processing |
 | Rust (stable, MSVC toolchain) | Build the app |
 | Visual Studio C++ Build Tools | Required by the MSVC Rust toolchain |
 
@@ -56,6 +62,10 @@ ollama_url    = "http://localhost:11434/api/generate"
 whisper_model = "whisper-large-turbo"
 llm_model     = "qwen2.5:7b-instruct"
 
+distill_mode = "Prompt"
+
+[[modes]]
+name   = "Prompt"
 prompt = """
 Rewrite the following dictation as clear, concise English. \
 Translate to English if needed. Fix grammar, remove filler, preserve intent. \
@@ -63,16 +73,29 @@ Output ONLY the rewritten text, no preamble.
 
 ---
 """
+
+[[modes]]
+name   = "Clean text"
+prompt = """
+Remove all filler words, interjections, and hesitations. \
+Fix punctuation. Output ONLY the cleaned text, no preamble.
+
+---
+"""
+
+[[modes]]
+name   = "Verbatim"
+prompt = ""
 ```
 
-`ollama_url` is the LLM generate endpoint — update the host/port to match your runner.
+`ollama_url` is the LLM generate endpoint — update the host/port to match your runner. Presets can be added, edited, or removed via **Settings**; the `Verbatim` preset cannot be edited (it bypasses the LLM entirely).
 
 **5. Run**
 ```
 dictaship.exe
 ```
 
-The app runs silently in the system tray. Right-click the tray icon for settings or to exit; double-click to show the log window.
+The app runs silently in the system tray. Right-click the tray icon to switch presets, open Settings, or exit. Double-click to show the log window.
 
 ## Installation
 
@@ -100,4 +123,4 @@ The installer:
 cargo test
 ```
 
-Tests cover WAV encoding correctness, config parsing, and the minimum-length guard. They do not require a running Whisper server or LLM.
+Tests cover config parsing, hotkey parsing, WAV encoding, DPI scaling, and the minimum-length guard. They do not require a running Whisper server or LLM.
