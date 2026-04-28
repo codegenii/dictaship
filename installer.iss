@@ -31,7 +31,7 @@ UninstallDisplayName={#AppName}
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: startup; Description: "Start {#AppName} automatically when Windows starts"; Flags: checked
+Name: startup; Description: "Start {#AppName} automatically when Windows starts"
 
 [Files]
 ; Binary: always overwritten so upgrades take effect immediately
