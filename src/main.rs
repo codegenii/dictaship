@@ -1,6 +1,6 @@
 use anyhow::Result;
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager};
-use muda::{CheckMenuItem, ContextMenu, Menu, MenuItem, MenuEvent};
+use muda::{CheckMenuItem, ContextMenu, Menu, MenuItem, MenuEvent, PredefinedMenuItem};
 use parking_lot::Mutex;
 use std::{sync::Arc, thread, time::Duration};
 use tao::event_loop::{ControlFlow, EventLoopBuilder};
@@ -16,13 +16,35 @@ mod tray;
 mod tray_balloon;
 
 use audio::{process, set_error_status, Recorder};
-use config::{load_config, save_distill_mode_to_config, save_modes_to_config};
+use config::{load_config, save_distill_mode_to_config, save_modes_to_config, PASSTHROUGH_MODE_NAME};
 use hotkey::{parse_hotkey, save_hotkey_to_config};
 use tray::icon_for_status;
 
 #[link(name = "user32")]
 unsafe extern "system" {
     fn SetMenuDefaultItem(h_menu: isize, u_item: u32, f_by_pos: u32) -> i32;
+}
+
+fn build_tray_menu(
+    modes: &[config::ModeConfig],
+    current_mode: &str,
+    show_logs_item: &MenuItem,
+    settings_item: &MenuItem,
+    exit_item: &MenuItem,
+) -> (Menu, Vec<(CheckMenuItem, String)>) {
+    let menu = Menu::new();
+    menu.append(show_logs_item).expect("menu append");
+    menu.append(settings_item).expect("menu append");
+    menu.append(&PredefinedMenuItem::separator()).expect("menu append");
+    let preset_items = modes.iter().map(|m| {
+        let item = CheckMenuItem::new(&m.name, true, m.name == current_mode, None);
+        menu.append(&item).expect("menu append");
+        (item, m.name.clone())
+    }).collect::<Vec<_>>();
+    menu.append(&PredefinedMenuItem::separator()).expect("menu append");
+    menu.append(exit_item).expect("menu append");
+    unsafe { SetMenuDefaultItem(menu.hpopupmenu(), 0, 1); }
+    (menu, preset_items)
 }
 
 fn main() -> Result<()> {
@@ -46,22 +68,23 @@ fn main() -> Result<()> {
     manager.register(toggle)?;
     let rx = GlobalHotKeyEvent::receiver();
 
-    let tray_menu = Menu::new();
-    let show_logs_item   = MenuItem::new("Show logs",        true, None);
-    let settings_item    = MenuItem::new("Settings",         true, None);
-    let passthrough_item = CheckMenuItem::new("Passthrough mode", true, false, None);
-    let exit_item        = MenuItem::new("Exit",             true, None);
-    tray_menu.append(&show_logs_item).expect("menu append");
-    tray_menu.append(&settings_item).expect("menu append");
-    tray_menu.append(&passthrough_item).expect("menu append");
-    tray_menu.append(&exit_item).expect("menu append");
+    // Distillation mode state — kept separately so it can change without reloading cfg
+    let initial_mode = cfg.distill_mode.clone()
+        .unwrap_or_else(|| cfg.modes.first().map(|m| m.name.clone()).unwrap_or_default());
+    let modes_state: Arc<Mutex<Vec<config::ModeConfig>>> = Arc::new(Mutex::new(cfg.modes.clone()));
+    let current_mode: Arc<Mutex<String>> = Arc::new(Mutex::new(initial_mode.clone()));
 
-    // Bold the first item as the Windows default menu action
-    unsafe { SetMenuDefaultItem(tray_menu.hpopupmenu(), 0, 1); }
+    let show_logs_item = MenuItem::new("Show logs", true, None);
+    let settings_item  = MenuItem::new("Settings",  true, None);
+    let exit_item      = MenuItem::new("Exit",       true, None);
+
+    let (init_menu, init_presets) = build_tray_menu(
+        &cfg.modes, &initial_mode, &show_logs_item, &settings_item, &exit_item,
+    );
 
     let tray = TrayIconBuilder::new()
         .with_icon(icon_for_status(None))
-        .with_menu(Box::new(tray_menu))
+        .with_menu(Box::new(init_menu))
         .with_tooltip(format!("Dictaship – {current_hotkey_str} to record"))
         .build()
         .expect("tray icon");
@@ -71,15 +94,10 @@ fn main() -> Result<()> {
     let menu_rx = MenuEvent::receiver();
     let tray_rx = TrayIconEvent::receiver();
 
-    // Distillation mode state — kept separately so it can change without reloading cfg
-    let initial_mode = cfg.distill_mode.clone()
-        .unwrap_or_else(|| cfg.modes.first().map(|m| m.name.clone()).unwrap_or_default());
-    let modes_state: Arc<Mutex<Vec<config::ModeConfig>>> = Arc::new(Mutex::new(cfg.modes.clone()));
-    let current_mode: Arc<Mutex<String>> = Arc::new(Mutex::new(initial_mode));
-
     let tray_status: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let mut last_status: Option<String> = None;
     let mut recorder: Option<Recorder> = None;
+    let mut preset_items = init_presets;
     println!("ready. {} to toggle recording.", current_hotkey_str);
 
     event_loop.run(move |_, _, cf| {
@@ -122,6 +140,13 @@ fn main() -> Result<()> {
                 *modes_state.lock() = result.modes.clone();
                 save_modes_to_config(&result.modes);
             }
+            let modes = modes_state.lock().clone();
+            let mode  = current_mode.lock().clone();
+            let (new_menu, new_items) = build_tray_menu(
+                &modes, &mode, &show_logs_item, &settings_item, &exit_item,
+            );
+            tray.set_menu(Some(Box::new(new_menu)));
+            preset_items = new_items;
         }
 
         while let Ok(ev) = menu_rx.try_recv() {
@@ -131,6 +156,20 @@ fn main() -> Result<()> {
                 let modes_snap = modes_state.lock().clone();
                 let mode_snap  = current_mode.lock().clone();
                 settings_dialog::open(&current_hotkey_str, modes_snap, &mode_snap);
+            }
+            // Preset selection: find match first to avoid borrow conflict on preset_items
+            let clicked = preset_items.iter()
+                .find(|(item, _)| ev.id == *item.id())
+                .map(|(_, name)| name.clone());
+            if let Some(name) = clicked {
+                *current_mode.lock() = name.clone();
+                save_distill_mode_to_config(&name);
+                let modes = modes_state.lock().clone();
+                let (new_menu, new_items) = build_tray_menu(
+                    &modes, &name, &show_logs_item, &settings_item, &exit_item,
+                );
+                tray.set_menu(Some(Box::new(new_menu)));
+                preset_items = new_items;
             }
         }
 
@@ -158,10 +197,10 @@ fn main() -> Result<()> {
                         println!("stopping.");
                         *tray_status.lock() = Some("Processing...".to_owned());
                         let (samples, sample_rate) = r.stop();
-                        let cfg         = cfg.clone();
-                        let status      = tray_status.clone();
-                        let passthrough = passthrough_item.is_checked();
-                        let mode_name   = current_mode.lock().clone();
+                        let cfg           = cfg.clone();
+                        let status        = tray_status.clone();
+                        let mode_name     = current_mode.lock().clone();
+                        let passthrough   = mode_name == PASSTHROUGH_MODE_NAME;
                         let active_prompt = {
                             let ms = modes_state.lock();
                             ms.iter().find(|m| m.name == mode_name)

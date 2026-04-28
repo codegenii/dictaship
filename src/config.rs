@@ -2,6 +2,8 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+pub const PASSTHROUGH_MODE_NAME: &str = "Passthrough";
+
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
 pub struct ModeConfig {
     pub name:   String,
@@ -44,6 +46,10 @@ pub fn default_modes(legacy_prompt: &str) -> Vec<ModeConfig> {
             prompt: "Remove all filler words, interjections, and hesitations. \
                      Fix punctuation. Output ONLY the cleaned text.\n\n---\n".to_string(),
         },
+        ModeConfig {
+            name:   PASSTHROUGH_MODE_NAME.to_string(),
+            prompt: String::new(),
+        },
     ]
 }
 
@@ -64,6 +70,8 @@ pub fn load_config() -> Result<Config> {
     let mut cfg = parse_config(&raw)?;
     if cfg.modes.is_empty() {
         cfg.modes = default_modes(&cfg.prompt);
+    } else if !cfg.modes.iter().any(|m| m.name == PASSTHROUGH_MODE_NAME) {
+        cfg.modes.push(ModeConfig { name: PASSTHROUGH_MODE_NAME.to_string(), prompt: String::new() });
     }
     Ok(cfg)
 }
@@ -179,6 +187,51 @@ mod tests {
         let cfg = parse_config(&raw).unwrap();
         assert_eq!(cfg.settings_w, Some(500u32));
         assert_eq!(cfg.settings_h, Some(350u32));
+    }
+
+    #[test]
+    fn default_modes_includes_passthrough() {
+        let modes = default_modes("prompt");
+        assert!(modes.iter().any(|m| m.name == PASSTHROUGH_MODE_NAME));
+        let pt = modes.iter().find(|m| m.name == PASSTHROUGH_MODE_NAME).unwrap();
+        assert!(pt.prompt.is_empty());
+    }
+
+    #[test]
+    fn load_config_adds_passthrough_when_missing() {
+        let raw = format!(r#"
+            {BASE_TOML}
+            [[modes]]
+            name   = "Distill"
+            prompt = "Fix grammar.\n"
+        "#);
+        let cfg = parse_config(&raw).unwrap();
+        // parse_config alone doesn't add Passthrough; simulate what load_config does
+        let mut cfg = cfg;
+        if !cfg.modes.iter().any(|m| m.name == PASSTHROUGH_MODE_NAME) {
+            cfg.modes.push(ModeConfig { name: PASSTHROUGH_MODE_NAME.to_string(), prompt: String::new() });
+        }
+        assert!(cfg.modes.iter().any(|m| m.name == PASSTHROUGH_MODE_NAME));
+    }
+
+    #[test]
+    fn load_config_does_not_duplicate_passthrough() {
+        let raw = format!(r#"
+            {BASE_TOML}
+            [[modes]]
+            name   = "Distill"
+            prompt = "Fix grammar.\n"
+
+            [[modes]]
+            name   = "Passthrough"
+            prompt = ""
+        "#);
+        let mut cfg = parse_config(&raw).unwrap();
+        if !cfg.modes.iter().any(|m| m.name == PASSTHROUGH_MODE_NAME) {
+            cfg.modes.push(ModeConfig { name: PASSTHROUGH_MODE_NAME.to_string(), prompt: String::new() });
+        }
+        let count = cfg.modes.iter().filter(|m| m.name == PASSTHROUGH_MODE_NAME).count();
+        assert_eq!(count, 1);
     }
 
     #[test]

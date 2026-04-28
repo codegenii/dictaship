@@ -4,7 +4,7 @@ use std::os::windows::ffi::OsStrExt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
-use crate::config::{load_settings_size, save_settings_size_to_config, ModeConfig};
+use crate::config::{load_settings_size, save_settings_size_to_config, ModeConfig, PASSTHROUGH_MODE_NAME};
 
 static OPEN:   AtomicBool = AtomicBool::new(false);
 static RESULT: std::sync::Mutex<Option<SettingsResult>> = std::sync::Mutex::new(None);
@@ -277,6 +277,21 @@ fn refresh_display(text: &str) {
     }
 }
 
+fn update_mode_buttons(sel: usize) {
+    let is_passthrough = MODES_DATA.with(|m| {
+        m.borrow().get(sel).map(|m| m.name == PASSTHROUGH_MODE_NAME).unwrap_or(false)
+    });
+    let enable = if is_passthrough { 0i32 } else { 1i32 };
+    SETTINGS_CTRLS.with(|c| {
+        if let Some(ctrls) = c.borrow().as_ref() {
+            unsafe {
+                EnableWindow(ctrls.edit_btn, enable);
+                EnableWindow(ctrls.del_btn, enable);
+            }
+        }
+    });
+}
+
 // ── Edit-preset nested dialog ────────────────────────────────────────────────
 
 unsafe extern "system" fn edit_dlg_proc(hwnd: isize, msg: u32, wp: usize, _lp: isize) -> isize {
@@ -478,6 +493,7 @@ unsafe extern "system" fn wnd_proc(hwnd: isize, msg: u32, wp: usize, lp: isize) 
                         PENDING_MODE.with(|p| *p.borrow_mut() = mode.name.clone());
                     }
                 });
+                update_mode_buttons(sel);
             }
             if notif == CBN_CLOSEUP {
                 // Return focus to the dialog so subsequent key presses are
@@ -489,7 +505,12 @@ unsafe extern "system" fn wnd_proc(hwnd: isize, msg: u32, wp: usize, lp: isize) 
         if id == ID_EDIT_PRESET {
             let combo = COMBO_HWND.with(|c| c.get());
             let sel = unsafe { SendMessageW(combo, CB_GETCURSEL, 0, 0) } as usize;
-            run_edit_dialog(hwnd, sel);
+            let is_passthrough = MODES_DATA.with(|m| {
+                m.borrow().get(sel).map(|m| m.name == PASSTHROUGH_MODE_NAME).unwrap_or(false)
+            });
+            if !is_passthrough {
+                run_edit_dialog(hwnd, sel);
+            }
             return 0;
         }
         if id == ID_ADD_MODE {
@@ -501,6 +522,10 @@ unsafe extern "system" fn wnd_proc(hwnd: isize, msg: u32, wp: usize, lp: isize) 
             if n <= 1 { return 0; } // always keep at least one mode
             let combo = COMBO_HWND.with(|c| c.get());
             let sel = unsafe { SendMessageW(combo, CB_GETCURSEL, 0, 0) } as usize;
+            let is_passthrough = MODES_DATA.with(|m| {
+                m.borrow().get(sel).map(|m| m.name == PASSTHROUGH_MODE_NAME).unwrap_or(false)
+            });
+            if is_passthrough { return 0; }
             MODES_DATA.with(|m| m.borrow_mut().remove(sel));
             let new_sel = if sel > 0 { sel - 1 } else { 0 };
             let new_name = MODES_DATA.with(|m| {
@@ -509,6 +534,7 @@ unsafe extern "system" fn wnd_proc(hwnd: isize, msg: u32, wp: usize, lp: isize) 
             PENDING_MODE.with(|p| *p.borrow_mut() = new_name);
             rebuild_combo(combo);
             unsafe { SendMessageW(combo, CB_SETCURSEL, new_sel, 0); }
+            update_mode_buttons(new_sel);
             return 0;
         }
         if id == ID_APPLY {
@@ -673,6 +699,7 @@ fn run_dialog(current_hotkey: String, modes: Vec<ModeConfig>, active_mode: Strin
         let mut rc = Rect { left: 0, top: 0, right: 0, bottom: 0 };
         GetClientRect(hwnd, &mut rc);
         layout_settings(rc.right - rc.left, rc.bottom - rc.top);
+        update_mode_buttons(sel_idx);
 
         SetFocus(hwnd);
 
