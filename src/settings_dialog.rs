@@ -15,7 +15,7 @@ pub struct SettingsResult {
     pub modes:     Vec<ModeConfig>,
 }
 
-pub const DEFAULT_HOTKEY: &str = "Alt+R";
+pub const DEFAULT_HOTKEY: &str = "Alt+Backtick";
 
 // Windows message/style constants
 const WM_COMMAND:          u32   = 0x0111;

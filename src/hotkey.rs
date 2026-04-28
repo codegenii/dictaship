@@ -13,6 +13,7 @@ pub fn parse_hotkey(s: &str) -> Option<HotKey> {
         "Q" => Code::KeyQ, "R" => Code::KeyR, "S" => Code::KeyS, "T" => Code::KeyT,
         "U" => Code::KeyU, "V" => Code::KeyV, "W" => Code::KeyW, "X" => Code::KeyX,
         "Y" => Code::KeyY, "Z" => Code::KeyZ,
+        "GRAVE" | "BACKQUOTE" | "BACKTICK" => Code::Backquote,
         "F1"  => Code::F1,  "F2"  => Code::F2,  "F3"  => Code::F3,  "F4"  => Code::F4,
         "F5"  => Code::F5,  "F6"  => Code::F6,  "F7"  => Code::F7,  "F8"  => Code::F8,
         "F9"  => Code::F9,  "F10" => Code::F10, "F11" => Code::F11, "F12" => Code::F12,
@@ -58,6 +59,18 @@ mod tests {
     #[test]
     fn alt_q_parses() {
         assert!(parse_hotkey("Alt+Q").is_some());
+    }
+
+    #[test]
+    fn grave_key_parses() {
+        assert!(parse_hotkey("Alt+Grave").is_some());
+        assert!(parse_hotkey("Alt+Backquote").is_some());
+        assert!(parse_hotkey("Alt+Backtick").is_some());
+        // All three spellings resolve to the same hotkey
+        assert_eq!(
+            parse_hotkey("Alt+Grave").unwrap().id(),
+            parse_hotkey("Alt+Backquote").unwrap().id(),
+        );
     }
 
     #[test]
